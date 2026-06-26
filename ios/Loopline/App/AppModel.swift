@@ -9,6 +9,14 @@ import AVFAudio
 final class AppModel: ObservableObject {
     enum Status: Equatable { case waiting, connected }
 
+    /// How the iOS audio session is configured.
+    enum AudioMode: String, CaseIterable {
+        case speaker   // `.default` — loud, full-range; mic may pick up the speaker
+        case calls     // `.voiceChat` — echo cancellation for two-way calls (quieter)
+
+        var title: String { self == .speaker ? "Speaker" : "Calls" }
+    }
+
     @Published var status: Status = .waiting
     @Published var peerName: String = ""
     @Published var micEnabled: Bool = false { didSet { audio.micEnabled = micEnabled } }
@@ -18,10 +26,12 @@ final class AppModel: ObservableObject {
     @Published var latencyMs: Int = 0
     @Published var running: Bool = false
     @Published var speakerVolume: Double = 1.0 { didSet { audio.setOutputVolume(Float(speakerVolume)) } }
-    // Off by default → `.default` audio mode = loud, full-range playback. Turning
-    // it on uses `.voiceChat` (hardware echo cancellation) but plays quieter at
-    // the call volume. Applied on the next Start Session.
-    @Published var echoCancellation: Bool = false { didSet { audio.echoCancellation = echoCancellation } }
+    /// Speaker = loud full-range (`.default`); Calls = echo cancellation
+    /// (`.voiceChat`). Applies on the next Start Session.
+    @Published var audioMode: AudioMode = AudioMode(rawValue:
+        UserDefaults.standard.string(forKey: "audioMode") ?? "speaker") ?? .speaker {
+        didSet { UserDefaults.standard.set(audioMode.rawValue, forKey: "audioMode") }
+    }
 
     @Published var connectedSince: Date?
 
@@ -74,7 +84,7 @@ final class AppModel: ObservableObject {
         if !micGranted { micEnabled = false }
         audio.micEnabled = micEnabled && micGranted
         audio.speakerEnabled = speakerEnabled
-        audio.echoCancellation = echoCancellation
+        audio.echoCancellation = (audioMode == .calls)
         do {
             try audio.start(captureEnabled: micGranted)
             audio.setOutputVolume(Float(speakerVolume))

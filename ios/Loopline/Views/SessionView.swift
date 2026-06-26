@@ -127,7 +127,7 @@ struct SessionView: View {
                     IconTile(systemImage: "mic.fill", color: Palette.green, size: 30, corner: 8)
                     VStack(alignment: .leading, spacing: 1) {
                         Text("iPhone Microphone").font(.system(size: 17, weight: .medium))
-                        Text(model.echoCancellation ? "Built-in · Voice isolation" : "Built-in")
+                        Text(model.audioMode == .calls ? "Call mode · echo cancelled" : "Speaker mode · full volume")
                             .font(.system(size: 13)).foregroundStyle(.secondary)
                     }
                     Spacer()

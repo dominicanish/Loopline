@@ -4,8 +4,6 @@ struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @AppStorage("colorSchemePref") private var schemePref = "light"
     @AppStorage("latencyMode") private var latencyMode = "balanced"
-    @AppStorage("noiseSuppression") private var noiseSuppression = true
-    @AppStorage("autoGain") private var autoGain = false
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("keepAudioBackground") private var keepAudioBackground = true
 
@@ -40,17 +38,18 @@ struct SettingsView: View {
                         .font(.system(size: 13)).foregroundStyle(.secondary)
                         .padding(.horizontal, 16).padding(.top, 8)
 
-                    SectionHeader(text: "Microphone")
-                    GlassCard {
-                        VStack(spacing: 0) {
-                            toggleRow("Echo Cancellation", isOn: $model.echoCancellation)
-                            RowDivider()
-                            toggleRow("Noise Suppression", isOn: $noiseSuppression)
-                            RowDivider()
-                            toggleRow("Auto Gain", isOn: $autoGain)
-                        }
+                    SectionHeader(text: "Audio mode")
+                    Picker("Audio mode", selection: $model.audioMode) {
+                        Text("Speaker").tag(AppModel.AudioMode.speaker)
+                        Text("Calls").tag(AppModel.AudioMode.calls)
                     }
+                    .pickerStyle(.segmented).labelsHidden()
                     .padding(.horizontal, 16)
+                    Text(model.audioMode == .calls
+                         ? "Calls: echo cancellation on, so the PC won't hear itself through the mic — best for two-way calls. Plays a bit quieter."
+                         : "Speaker: loud, full-range playback for music and media. The mic may pick up the speaker, so switch to Calls for two-way calls.")
+                        .font(.system(size: 13)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 16).padding(.top, 8)
 
                     SectionHeader(text: "Connection")
                     GlassCard {

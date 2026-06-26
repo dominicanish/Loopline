@@ -162,19 +162,29 @@ final class AudioEngine {
         if !recordSessionActive {
             do {
                 let session = AVAudioSession.sharedInstance()
-                let mode: AVAudioSession.Mode = echoCancellation ? .voiceChat : .default
-                try session.setCategory(.playAndRecord, mode: mode, options: [.defaultToSpeaker])
+                // Use `.default` mode (NOT `.voiceChat`): voiceChat forces the
+                // low-quality HFP/voice route and can move playback off the
+                // speaker, which kills the PC audio the moment the mic turns on.
+                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
                 try session.setPreferredSampleRate(sampleRate)
                 try session.setPreferredIOBufferDuration(0.01)
                 try session.setActive(true)
                 try? session.overrideOutputAudioPort(.speaker)
-                try startPlaybackGraph()
+                try startPlaybackGraph()   // rebuild playback under the new session
                 recordSessionActive = true
             } catch {
                 recordSessionActive = false
                 try? start()    // roll back to playback-only
                 return false
             }
+        }
+
+        // Only tap once the input bus has a valid format — tapping a 0 Hz /
+        // 0-channel input (route not settled) crashes inside CreateRecordingTap.
+        let inFmt = engine.inputNode.inputFormat(forBus: 0)
+        guard inFmt.sampleRate > 0, inFmt.channelCount > 0 else {
+            NSLog("Loopline: mic input not ready (\(inFmt)); mic off")
+            return false
         }
         micConverter = nil
         engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in

@@ -21,6 +21,7 @@ public sealed class AudioRouter : IDisposable
     private readonly MMDevice _micRender;
     private readonly MMDevice _loopbackRender;
     private readonly bool _mutePc;
+    private readonly float _gain;
 
     private WasapiLoopbackCapture _capture;
     private WasapiOut _output;
@@ -36,11 +37,12 @@ public sealed class AudioRouter : IDisposable
     public volatile float MicLevel;
     public volatile float SpeakerLevel;
 
-    public AudioRouter(MMDevice micRender, MMDevice loopbackRender, bool mutePc)
+    public AudioRouter(MMDevice micRender, MMDevice loopbackRender, bool mutePc, float gain)
     {
         _micRender = micRender;
         _loopbackRender = loopbackRender;
         _mutePc = mutePc;
+        _gain = gain <= 0 ? 1f : gain;
     }
 
     public void Start()
@@ -126,11 +128,12 @@ public sealed class AudioRouter : IDisposable
 
             for (int i = 0; i < read; i++)
             {
-                int s = (int)(Math.Clamp(floats[i], -1f, 1f) * 32767f);
+                float g = Math.Clamp(floats[i] * _gain, -1f, 1f);
+                int s = (int)(g * 32767f);
                 pcm[i * 2] = (byte)(s & 0xFF);
                 pcm[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
             }
-            SpeakerLevel = RmsFloat(floats, read);
+            SpeakerLevel = Math.Min(1f, RmsFloat(floats, read) * _gain);
 
             if (read == floats.Length) OnSpeakerPacket?.Invoke(pcm);
             else OnSpeakerPacket?.Invoke(pcm[..(read * 2)]);

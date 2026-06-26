@@ -101,7 +101,8 @@ Banderas útiles del servidor:
 |------|--------|
 | `--list` | Lista dispositivos de reproducción y grabación y sale. |
 | `--no-default-switch` | No cambia el micrófono por defecto de Windows. |
-| `--no-mute-pc` | No silencia la salida de la PC mientras el iPhone está conectado. |
+| `--gain X` | Multiplica el volumen del audio enviado al iPhone (p.ej. `--gain 4`). |
+| `--mute-pc` | Silencia la salida de la PC al conectar (solo si tu tarjeta lo permite — ver nota). |
 | `--port N` | Puerto del túnel hacia la app (por defecto `7001`). |
 
 ## Compilar desde el código
@@ -125,9 +126,11 @@ Detalles de la configuración de audio en Windows:
 ## Limitaciones / notas
 
 - La firma gratis de sideload caduca cada 7 días (límite de Apple).
-- Mientras el iPhone está conectado, la salida de la PC queda en **mute** (para
-  que el audio solo salga del teléfono). Se restaura al desconectar/cerrar, o
-  usa `--no-mute-pc` para desactivarlo.
+- En **algunas** tarjetas el WASAPI loopback sigue el volumen/mute de la PC: al
+  mutear, el iPhone deja de recibir audio. Por eso el mute está **apagado por
+  defecto**; si tu equipo lo soporta, actívalo con `--mute-pc`. Si prefieres
+  bocinas bajas + iPhone fuerte, baja el volumen de Windows y compensa con
+  `--gain` (p.ej. `--gain 4`).
 - `IPolicyConfig` es una API no documentada de Windows (la que usan nircmd y
   similares) — estable en la práctica, pero no oficial.
 - Pensado para uso personal en tu propio equipo.

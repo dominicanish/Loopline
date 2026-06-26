@@ -8,7 +8,8 @@ const int defaultPort = 7001;
 
 bool listOnly = args.Contains("--list");
 bool noSwitch = args.Contains("--no-default-switch");
-bool noMutePc = args.Contains("--no-mute-pc");
+bool mutePc = args.Contains("--mute-pc");
+float gain = ReadFloatArg(args, "--gain", 1.0f);
 int port = ReadIntArg(args, "--port", defaultPort);
 
 Banner();
@@ -38,6 +39,15 @@ if (devices.LoopbackRender == null)
     Warn("No pude leer el dispositivo de salida por defecto (no podré enviar el audio\n" +
          "      de la PC al iPhone).");
 }
+
+Info($"Mute de la PC: {(mutePc ? "ON (--mute-pc)" : "OFF")}   ·   Ganancia: x{gain:0.0#} (--gain)");
+if (mutePc)
+    Warn("OJO: en algunas tarjetas el loopback SIGUE el volumen/mute, así que mutear\n" +
+         "      deja el audio en silencio. Si no oyes nada con --mute-pc, quítalo y baja\n" +
+         "      el volumen de la PC; sube la app con --gain (p.ej. --gain 4) si suena bajo.");
+else
+    Info("Tip: si quieres las bocinas de la PC bajas pero el iPhone fuerte, baja el\n" +
+         "      volumen de Windows y compensa con --gain (p.ej. --gain 4).");
 
 // Make the iPhone mic the default recording device so every app picks it up.
 // The speaker path uses loopback + mute instead of switching playback.
@@ -95,7 +105,7 @@ while (!cts.IsCancellationRequested)
 
         using (owned)
         using (var session = new PhoneSession(stream))
-        using (var router = new AudioRouter(devices.MicRender, devices.LoopbackRender, mutePc: !noMutePc))
+        using (var router = new AudioRouter(devices.MicRender, devices.LoopbackRender, mutePc: mutePc, gain: gain))
         {
             session.OnMic = router.EnqueueMic;
             router.OnSpeakerPacket = session.SendSpeaker;
@@ -168,12 +178,21 @@ static int ReadIntArg(string[] args, string name, int fallback)
     return fallback;
 }
 
+static float ReadFloatArg(string[] args, string name, float fallback)
+{
+    int i = Array.IndexOf(args, name);
+    if (i >= 0 && i + 1 < args.Length &&
+        float.TryParse(args[i + 1], System.Globalization.NumberStyles.Float,
+                       System.Globalization.CultureInfo.InvariantCulture, out var v))
+        return v;
+    return fallback;
+}
+
 static void ReportDevices(RoutedDevices d)
 {
     Console.WriteLine("Ruteo de audio:");
     Line("  mic del iPhone   → ", d.MicRender);
     Line("  audio de la PC   ← loopback de ", d.LoopbackRender);
-    Console.WriteLine("  (la salida de la PC se silencia mientras el iPhone esté conectado)");
     Console.WriteLine();
 
     static void Line(string label, MMDevice dev) =>

@@ -1,12 +1,14 @@
 import SwiftUI
 
-/// The Screen tab: the live PC screen with a remote trackpad + keyboard on top
-/// (landscape, full screen, fixed controls).
+/// The Screen tab: the live PC screen filling the display, with a remote
+/// trackpad + keyboard on top (landscape, presented full-screen).
 struct ScreenView: View {
     @EnvironmentObject private var model: AppModel
     var exit: () -> Void
 
     @State private var keyboardActive = false
+    @State private var paletteOffset = CGSize(width: -300, height: -150)
+    @GestureState private var paletteDrag = CGSize.zero
 
     private let moveScale: CGFloat = 1.7
     private let scrollScale: CGFloat = 0.35
@@ -16,11 +18,15 @@ struct ScreenView: View {
             Color.black.ignoresSafeArea()
 
             if let img = model.screenImage {
-                Image(uiImage: img)
-                    .resizable()
-                    .interpolation(.medium)
-                    .aspectRatio(contentMode: .fit)
-                    .ignoresSafeArea()
+                GeometryReader { geo in
+                    Image(uiImage: img)
+                        .resizable()
+                        .interpolation(.medium)
+                        .aspectRatio(contentMode: .fill)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                        .clipped()
+                }
+                .ignoresSafeArea()
             } else {
                 hint
             }
@@ -36,16 +42,17 @@ struct ScreenView: View {
             )
             .ignoresSafeArea()
 
-            // Fixed controls, top-leading. Nothing here moves.
-            VStack {
-                HStack {
-                    controls
-                    Spacer()
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 18)
-            .padding(.top, 12)
+            controls
+                .offset(x: paletteOffset.width + paletteDrag.width,
+                        y: paletteOffset.height + paletteDrag.height)
+                .gesture(
+                    DragGesture(minimumDistance: 12)
+                        .updating($paletteDrag) { v, s, _ in s = v.translation }
+                        .onEnded { v in
+                            paletteOffset.width += v.translation.width
+                            paletteOffset.height += v.translation.height
+                        }
+                )
 
             KeyboardCatcher(active: $keyboardActive,
                             onText: { t in t == "\n" ? model.sendKeyCode(2) : model.sendKeyText(t) },
@@ -53,8 +60,7 @@ struct ScreenView: View {
                 .frame(width: 0, height: 0)
         }
         .statusBarHidden(true)
-        .toolbar(.hidden, for: .tabBar)
-        .ignoresSafeArea(.keyboard)          // the keyboard never pushes the layout
+        .ignoresSafeArea(.keyboard, edges: .all)   // the keyboard never shifts the layout
         .onAppear { Orientation.goLandscape(); model.setScreenStreaming(true) }
         .onDisappear { keyboardActive = false; model.setScreenStreaming(false); Orientation.goPortrait() }
     }
@@ -72,6 +78,9 @@ struct ScreenView: View {
 
     private var controls: some View {
         HStack(spacing: 12) {
+            Image(systemName: "line.3.horizontal")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.5))
             cbutton("keyboard", active: keyboardActive) { keyboardActive.toggle() }
             cbutton("xmark", active: false) { keyboardActive = false; exit() }
         }

@@ -17,7 +17,7 @@ struct RootView: View {
                     SessionView()
                 }
                 Tab("Screen", systemImage: "rectangle.on.rectangle", value: Screen.screen) {
-                    ScreenView(exit: { selection = .session })
+                    Color.black.ignoresSafeArea()   // placeholder; the cover takes over
                 }
             }
             Tab("Settings", systemImage: "gearshape", value: Screen.settings) {
@@ -31,9 +31,20 @@ struct RootView: View {
                 selection = .connect
             }
         }
+        // Present Screen full-screen so the tab bar is hidden while remote-controlling.
+        .fullScreenCover(isPresented: screenPresented) {
+            ScreenView(exit: { selection = .session })
+        }
     }
 
     private var connected: Bool { model.status == .connected }
+
+    private var screenPresented: Binding<Bool> {
+        Binding(
+            get: { selection == .screen && connected },
+            set: { shown in if !shown && selection == .screen { selection = .session } }
+        )
+    }
 }
 
 #Preview {

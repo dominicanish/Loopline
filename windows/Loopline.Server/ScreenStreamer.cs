@@ -19,9 +19,9 @@ public sealed class ScreenStreamer : IDisposable
     private volatile bool _running;
     private volatile bool _enabled;
 
-    private const int MaxWidth = 1280;
+    private const int MaxWidth = 1366;
     private const int Fps = 60;
-    private const long Quality = 45;
+    private const long Quality = 85;
 
     public void SetEnabled(bool on)
     {

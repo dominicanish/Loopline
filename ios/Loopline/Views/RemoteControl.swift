@@ -87,6 +87,39 @@ final class KeyCatcherView: UIView, UIKeyInput {
     func deleteBackward() { onBackspace?() }
 }
 
+// MARK: - Screen decode (latest-frame-wins)
+
+/// Decodes incoming JPEG screen frames on a background queue, always skipping to
+/// the most recent frame so a slow decode never builds up latency.
+final class ScreenDecoder {
+    var onImage: ((UIImage?) -> Void)?   // delivered on the main thread
+
+    private let queue = DispatchQueue(label: "loopline.screen.decode", qos: .userInteractive)
+    private let lock = NSLock()
+    private var pending: Data?
+    private var draining = false
+
+    func submit(_ data: Data) {
+        lock.lock()
+        pending = data
+        if draining { lock.unlock(); return }
+        draining = true
+        lock.unlock()
+        queue.async { [weak self] in self?.drain() }
+    }
+
+    private func drain() {
+        while true {
+            lock.lock()
+            guard let data = pending else { draining = false; lock.unlock(); return }
+            pending = nil
+            lock.unlock()
+            let img = UIImage(data: data)
+            DispatchQueue.main.async { [weak self] in self?.onImage?(img) }
+        }
+    }
+}
+
 // MARK: - Orientation
 
 /// Locks the app to portrait everywhere except the Screen tab, which requests

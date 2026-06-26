@@ -51,10 +51,12 @@ final class AppModel: ObservableObject {
 
     private let audio = AudioEngine()
     private let link = USBLink()
+    private let screenDecoder = ScreenDecoder()
     private var meterTimer: Timer?
     private var pingTimer: Timer?
 
     init() {
+        screenDecoder.onImage = { [weak self] img in self?.screenImage = img }
         audio.onMicData = { [weak self] data in
             self?.link.send(.micPCM, data)
         }
@@ -193,11 +195,8 @@ final class AppModel: ObservableObject {
         case .spkPCM:
             audio.enqueueSpeaker(payload)
         case .screenFrame:
-            // Decode off the link queue so audio parsing isn't blocked.
-            DispatchQueue.global(qos: .userInitiated).async {
-                let img = UIImage(data: payload)
-                Task { @MainActor in self.screenImage = img }
-            }
+            // Decode off the link queue, dropping stale frames to keep latency low.
+            screenDecoder.submit(payload)
         case .hello:
             if let hello = Hello.decode(payload) {
                 Task { @MainActor in

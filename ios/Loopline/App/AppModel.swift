@@ -77,7 +77,7 @@ final class AppModel: ObservableObject {
             NSLog("Loopline: audio start failed \(error)")
         }
         if micGranted {
-            if micEnabled { audio.setMicSending(true) }
+            audio.micSendEnabled = micEnabled
         } else {
             micEnabled = false
         }
@@ -85,37 +85,39 @@ final class AppModel: ObservableObject {
         startMeters()
     }
 
-    /// Apply the mic toggle at runtime (idempotent), requesting permission if needed.
+    /// The mic toggle only gates whether captured frames are sent to the PC. The
+    /// mic is captured for the whole session (indicator on). If permission wasn't
+    /// held when the session started, enabling the toggle requests it and
+    /// reconfigures the session once.
     private func applyMic() {
         guard running else { return }
-        guard micEnabled else { audio.setMicSending(false); return }
-        switch AVAudioApplication.shared.recordPermission {
-        case .granted:
-            enableMicSending()
-        case .denied:
-            micEnabled = false
-        default:
-            AVAudioApplication.requestRecordPermission { [weak self] granted in
-                Task { @MainActor in
-                    guard let self else { return }
-                    if granted { self.enableMicSending() } else { self.micEnabled = false }
+        if micEnabled && !audio.micCapable {
+            switch AVAudioApplication.shared.recordPermission {
+            case .denied:
+                micEnabled = false
+            case .granted:
+                reconfigureForMic()
+            default:
+                AVAudioApplication.requestRecordPermission { [weak self] granted in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        if granted { self.reconfigureForMic() } else { self.micEnabled = false }
+                    }
                 }
             }
+            return
         }
+        audio.micSendEnabled = micEnabled
     }
 
-    private func enableMicSending() {
-        // If the session was started playback-only (permission granted after
-        // Start), reconfigure it once into a mic-capable session, then tap.
-        if !audio.micCapable {
-            do {
-                try audio.start(micCapable: true)
-                audio.setOutputVolume(Float(speakerVolume))
-            } catch {
-                NSLog("Loopline: mic reconfigure failed \(error)")
-            }
+    private func reconfigureForMic() {
+        do {
+            try audio.start(micCapable: true)
+            audio.setOutputVolume(Float(speakerVolume))
+        } catch {
+            NSLog("Loopline: mic reconfigure failed \(error)")
         }
-        audio.setMicSending(true)
+        audio.micSendEnabled = micEnabled
     }
 
     func stop() {

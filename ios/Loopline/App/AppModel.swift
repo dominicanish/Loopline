@@ -71,13 +71,13 @@ final class AppModel: ObservableObject {
         audio.speakerEnabled = speakerEnabled
         audio.echoCancellation = echoCancellation
         do {
-            try audio.start()
+            try audio.start(micCapable: micGranted)
             audio.setOutputVolume(Float(speakerVolume))
         } catch {
             NSLog("Loopline: audio start failed \(error)")
         }
         if micGranted {
-            if micEnabled { audio.startMic() }
+            if micEnabled { audio.setMicSending(true) }
         } else {
             micEnabled = false
         }
@@ -88,20 +88,34 @@ final class AppModel: ObservableObject {
     /// Apply the mic toggle at runtime (idempotent), requesting permission if needed.
     private func applyMic() {
         guard running else { return }
-        guard micEnabled else { audio.stopMic(); return }
+        guard micEnabled else { audio.setMicSending(false); return }
         switch AVAudioApplication.shared.recordPermission {
         case .granted:
-            audio.startMic()
+            enableMicSending()
         case .denied:
             micEnabled = false
         default:
             AVAudioApplication.requestRecordPermission { [weak self] granted in
                 Task { @MainActor in
                     guard let self else { return }
-                    if granted { self.audio.startMic() } else { self.micEnabled = false }
+                    if granted { self.enableMicSending() } else { self.micEnabled = false }
                 }
             }
         }
+    }
+
+    private func enableMicSending() {
+        // If the session was started playback-only (permission granted after
+        // Start), reconfigure it once into a mic-capable session, then tap.
+        if !audio.micCapable {
+            do {
+                try audio.start(micCapable: true)
+                audio.setOutputVolume(Float(speakerVolume))
+            } catch {
+                NSLog("Loopline: mic reconfigure failed \(error)")
+            }
+        }
+        audio.setMicSending(true)
     }
 
     func stop() {

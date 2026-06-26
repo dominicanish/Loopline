@@ -40,7 +40,8 @@ final class AudioEngine {
     private var outputVolume: Float = 1
 
     private var micActive = false
-    private var recordSessionActive = false
+    /// True when the session was started in `.playAndRecord` (mic permission held).
+    private(set) var micCapable = false
     private lazy var micWireFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48_000,
                                                    channels: 1, interleaved: true)!
     private var micConverter: AVAudioConverter?
@@ -49,23 +50,31 @@ final class AudioEngine {
 
     // MARK: Lifecycle
 
-    /// Start in playback-only (`.playback`) mode — high quality and it never
-    /// touches the mic input node (which would crash without permission). We
-    /// upgrade to `.playAndRecord` lazily in `startMic()`.
-    func start() throws {
+    /// Start audio. When `micCapable` we configure `.playAndRecord` up front so the
+    /// engine settles in that route once — enabling the mic later is then just a
+    /// tap install on the already-running graph (no mid-session category switch,
+    /// which is what previously dropped audio / failed to record). `.default` mode
+    /// (not `.voiceChat`) keeps full-range playback on the speaker.
+    func start(micCapable: Bool) throws {
+        self.micCapable = micCapable
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playback, mode: .default, options: [])
+        if micCapable {
+            try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
+        } else {
+            try session.setCategory(.playback, mode: .default, options: [])
+        }
         try session.setPreferredSampleRate(sampleRate)
         try session.setPreferredIOBufferDuration(0.01)
         try session.setActive(true)
+        if micCapable { try? session.overrideOutputAudioPort(.speaker) }
         try startPlaybackGraph()
     }
 
     func stop() {
-        stopMic()
-        recordSessionActive = false
+        setMicSending(false)
         if engine.isRunning { engine.stop() }
         if let n = sourceNode { engine.detach(n); sourceNode = nil }
+        micCapable = false
         resetJitter()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
@@ -155,49 +164,32 @@ final class AudioEngine {
 
     // MARK: Mic (phone -> PC)
 
-    /// Enable mic capture. Caller guarantees record permission is granted.
+    /// Install or remove the mic tap. The engine is already running in
+    /// `.playAndRecord` (set up in `start`), so installing the tap here is
+    /// reliable — the input route has long since settled. Installing the tap is
+    /// what lights the mic-in-use indicator.
     @discardableResult
-    func startMic() -> Bool {
-        guard !micActive else { return true }
-        if !recordSessionActive {
-            do {
-                let session = AVAudioSession.sharedInstance()
-                // Use `.default` mode (NOT `.voiceChat`): voiceChat forces the
-                // low-quality HFP/voice route and can move playback off the
-                // speaker, which kills the PC audio the moment the mic turns on.
-                try session.setCategory(.playAndRecord, mode: .default, options: [.defaultToSpeaker])
-                try session.setPreferredSampleRate(sampleRate)
-                try session.setPreferredIOBufferDuration(0.01)
-                try session.setActive(true)
-                try? session.overrideOutputAudioPort(.speaker)
-                try startPlaybackGraph()   // rebuild playback under the new session
-                recordSessionActive = true
-            } catch {
-                recordSessionActive = false
-                try? start()    // roll back to playback-only
+    func setMicSending(_ on: Bool) -> Bool {
+        if on {
+            guard micCapable else { return false }
+            if micActive { return true }
+            let inFmt = engine.inputNode.inputFormat(forBus: 0)
+            guard inFmt.sampleRate > 0, inFmt.channelCount > 0 else {
+                NSLog("Loopline: mic input not ready (\(inFmt))")
                 return false
             }
+            micConverter = nil
+            engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+                self?.handleMicBuffer(buffer)
+            }
+            micActive = true
+            return true
+        } else {
+            guard micActive else { return true }
+            engine.inputNode.removeTap(onBus: 0)
+            micActive = false
+            return true
         }
-
-        // Only tap once the input bus has a valid format — tapping a 0 Hz /
-        // 0-channel input (route not settled) crashes inside CreateRecordingTap.
-        let inFmt = engine.inputNode.inputFormat(forBus: 0)
-        guard inFmt.sampleRate > 0, inFmt.channelCount > 0 else {
-            NSLog("Loopline: mic input not ready (\(inFmt)); mic off")
-            return false
-        }
-        micConverter = nil
-        engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
-            self?.handleMicBuffer(buffer)
-        }
-        micActive = true
-        return true
-    }
-
-    func stopMic() {
-        guard micActive else { return }
-        engine.inputNode.removeTap(onBus: 0)
-        micActive = false
     }
 
     private func handleMicBuffer(_ buffer: AVAudioPCMBuffer) {

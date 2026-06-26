@@ -32,6 +32,15 @@ if (!devices.IsComplete)
     Warn("No encontré los cables virtuales necesarios. Instala VB-Cable A+B (o VoiceMeeter)\n" +
          "      y vuelve a correr. Usa `Loopline.Server --list` para ver tus dispositivos.");
 }
+else if (IsSingleCable(devices))
+{
+    Warn("Detecté UN SOLO cable virtual (sin A/B). El micrófono funciona, pero el\n" +
+         "      altavoz comparte el mismo cable, así que el audio de la PC puede no oírse\n" +
+         "      o mezclarse con tu micrófono. Para full-duplex instala VB-CABLE A+B\n" +
+         "      (gratis) — ver docs/setup-windows.md.");
+    Info("Para verificar el altavoz: reproduce algo en la PC y observa el medidor 'spk'\n" +
+         "      abajo. Si no se mueve, el audio de la PC no está entrando al cable.");
+}
 
 // Switch Windows defaults so every app routes through Loopline, and remember
 // the originals so we can restore them on exit.
@@ -175,6 +184,15 @@ static void ReportDevices(RoutedDevices d)
 
     static void Line(string label, MMDevice dev) =>
         Console.WriteLine(label + (dev != null ? Short(dev.FriendlyName) : "(no encontrado)"));
+}
+
+static bool IsSingleCable(RoutedDevices d)
+{
+    if (d.MicRender == null || d.SpeakerCapture == null) return false;
+    string[] twoCableHints = { "CABLE-A", "CABLE-B", "VoiceMeeter" };
+    bool mic = twoCableHints.Any(h => d.MicRender.FriendlyName.Contains(h, StringComparison.OrdinalIgnoreCase));
+    bool spk = twoCableHints.Any(h => d.SpeakerCapture.FriendlyName.Contains(h, StringComparison.OrdinalIgnoreCase));
+    return !mic && !spk;
 }
 
 static string Short(string name) => name.Length > 42 ? name[..42] + "…" : name;

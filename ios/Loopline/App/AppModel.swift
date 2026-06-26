@@ -17,6 +17,11 @@ final class AppModel: ObservableObject {
     @Published var speakerLevel: Float = 0
     @Published var latencyMs: Int = 0
     @Published var running: Bool = false
+    @Published var speakerVolume: Double = 1.0 { didSet { audio.setOutputVolume(Float(speakerVolume)) } }
+    @Published var echoCancellation: Bool = true { didSet { audio.echoCancellation = echoCancellation } }
+
+    let sampleRate = Int(AudioFormatSpec.sampleRate)
+    let bitDepth = 16
 
     private let audio = AudioEngine()
     private let link = USBLink()
@@ -64,8 +69,10 @@ final class AppModel: ObservableObject {
         if !micGranted { micEnabled = false }
         audio.micEnabled = micEnabled && micGranted
         audio.speakerEnabled = speakerEnabled
+        audio.echoCancellation = echoCancellation
         do {
             try audio.start(captureEnabled: micGranted)
+            audio.setOutputVolume(Float(speakerVolume))
         } catch {
             NSLog("Loopline: audio start failed \(error)")
         }

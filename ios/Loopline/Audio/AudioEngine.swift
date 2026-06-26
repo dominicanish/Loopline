@@ -16,6 +16,8 @@ final class AudioEngine {
     /// Gates: only send mic / only render speaker when enabled.
     var micEnabled = false
     var speakerEnabled = true
+    /// When true use `.voiceChat` (hardware echo cancellation); otherwise `.default`.
+    var echoCancellation = true
 
     private let engine = AVAudioEngine()
     private var sourceNode: AVAudioSourceNode?
@@ -109,9 +111,15 @@ final class AudioEngine {
 
     // MARK: - Private
 
+    /// Sets the playback volume of the incoming (computer) audio. 0...1.
+    func setOutputVolume(_ v: Float) {
+        engine.mainMixerNode.outputVolume = max(0, min(1, v))
+    }
+
     private func configureSession() throws {
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .voiceChat,
+        let mode: AVAudioSession.Mode = echoCancellation ? .voiceChat : .default
+        try session.setCategory(.playAndRecord, mode: mode,
                                 options: [.defaultToSpeaker, .allowBluetoothA2DP, .allowBluetoothHFP])
         try session.setPreferredSampleRate(AudioFormatSpec.sampleRate)
         try session.setPreferredIOBufferDuration(0.01)

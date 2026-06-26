@@ -44,6 +44,17 @@ public sealed class DevicePicker
         catch { return null; }
     }
 
+    /// <summary>All active playback devices (for manual loopback-source selection).</summary>
+    public List<MMDevice> RenderDevices() =>
+        _en.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active).ToList();
+
+    /// <summary>Resolve a render device by its endpoint id, or null.</summary>
+    public MMDevice RenderById(string id)
+    {
+        if (string.IsNullOrEmpty(id)) return null;
+        try { return _en.GetDevice(id); } catch { return null; }
+    }
+
     public (List<string> renders, List<string> captures) ListNames()
     {
         var renders = _en.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active)

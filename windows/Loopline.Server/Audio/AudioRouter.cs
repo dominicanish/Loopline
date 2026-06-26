@@ -20,8 +20,7 @@ public sealed class AudioRouter : IDisposable
 
     private readonly MMDevice _micRender;
     private readonly MMDevice _loopbackRender;
-    private readonly bool _mutePc;
-    private readonly float _gain;
+    private readonly bool _initialMute;
 
     private WasapiLoopbackCapture _capture;
     private WasapiOut _output;
@@ -30,7 +29,10 @@ public sealed class AudioRouter : IDisposable
     private Thread _pump;
     private volatile bool _running;
     private bool _prevMute;
-    private bool _didMute;
+    private bool _capturedMute;
+
+    /// <summary>Output volume multiplier for the audio sent to the phone. Live.</summary>
+    public volatile float Gain;
 
     /// <summary>Raised with a 48 kHz mono int16 packet to forward to the phone speaker.</summary>
     public Action<byte[]> OnSpeakerPacket;
@@ -41,8 +43,15 @@ public sealed class AudioRouter : IDisposable
     {
         _micRender = micRender;
         _loopbackRender = loopbackRender;
-        _mutePc = mutePc;
-        _gain = gain <= 0 ? 1f : gain;
+        _initialMute = mutePc;
+        Gain = gain <= 0 ? 1f : gain;
+    }
+
+    /// <summary>Mute/unmute the PC's loudspeaker output (live).</summary>
+    public void SetMute(bool on)
+    {
+        if (_loopbackRender == null) return;
+        try { _loopbackRender.AudioEndpointVolume.Mute = on; } catch { }
     }
 
     public void Start()
@@ -71,16 +80,15 @@ public sealed class AudioRouter : IDisposable
             _pump = new Thread(PumpCapture) { IsBackground = true, Name = "Loopline-loopback" };
             _pump.Start();
 
-            if (_mutePc)
+            // Remember the original mute so we can restore it, then apply the
+            // initial mute setting. Mute can be toggled live via SetMute().
+            try
             {
-                try
-                {
-                    _prevMute = _loopbackRender.AudioEndpointVolume.Mute;
-                    _loopbackRender.AudioEndpointVolume.Mute = true;
-                    _didMute = true;
-                }
-                catch { /* keep going; audio still bridges, PC just isn't muted */ }
+                _prevMute = _loopbackRender.AudioEndpointVolume.Mute;
+                _capturedMute = true;
+                _loopbackRender.AudioEndpointVolume.Mute = _initialMute;
             }
+            catch { /* keep going; audio still bridges */ }
         }
 
         // --- Mic path: phone mic -> CABLE input ---
@@ -126,14 +134,15 @@ public sealed class AudioRouter : IDisposable
             int read = sp.Read(floats, 0, floats.Length);
             if (read <= 0) { Thread.Sleep(2); continue; }
 
+            float gain = Gain;
             for (int i = 0; i < read; i++)
             {
-                float g = Math.Clamp(floats[i] * _gain, -1f, 1f);
+                float g = Math.Clamp(floats[i] * gain, -1f, 1f);
                 int s = (int)(g * 32767f);
                 pcm[i * 2] = (byte)(s & 0xFF);
                 pcm[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
             }
-            SpeakerLevel = Math.Min(1f, RmsFloat(floats, read) * _gain);
+            SpeakerLevel = Math.Min(1f, RmsFloat(floats, read) * gain);
 
             if (read == floats.Length) OnSpeakerPacket?.Invoke(pcm);
             else OnSpeakerPacket?.Invoke(pcm[..(read * 2)]);
@@ -188,10 +197,10 @@ public sealed class AudioRouter : IDisposable
         _capture?.Dispose();
         try { _output?.Stop(); } catch { }
         _output?.Dispose();
-        if (_didMute)
+        if (_capturedMute)
         {
             try { _loopbackRender.AudioEndpointVolume.Mute = _prevMute; } catch { }
-            _didMute = false;
+            _capturedMute = false;
         }
     }
 }

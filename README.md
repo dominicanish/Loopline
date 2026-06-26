@@ -87,22 +87,36 @@ Detalles paso a paso: [`docs/sideload-ios.md`](docs/sideload-ios.md).
 ## Uso
 
 1. Conecta el iPhone por USB (acepta *"Confiar en esta computadora"*).
-2. Corre `Loopline.Server.exe` en la PC.
-3. Abre **Loopline** en el iPhone y toca **Iniciar**.
-4. El servidor enlaza por USB, fija los dispositivos virtuales como
-   predeterminados y empieza a enrutar. Verás los medidores de nivel en la
-   consola y en la app.
-5. Al cerrar el servidor (Ctrl+C), **restaura** tus dispositivos de audio
-   originales.
+2. **Doble clic** en `Loopline.Server.exe` — abre un **menú interactivo** (sin
+   argumentos). El puente arranca solo y enlaza cuando abres la app.
+3. Abre **Loopline** en el iPhone y toca **Start Session**.
+4. En la consola verás el estado, los medidores y un menú con teclas:
 
-Banderas útiles del servidor:
+   ```
+   Estado:   ● Conectado a MAYKOL-PC   (48 kHz · 12 ms)
+             mic [####······]   spk [######····]
+
+   Opciones (pulsa una tecla):
+     [M]  Mute de la PC ............ OFF
+     [+/-] Ganancia del audio ...... x1.0
+     [D]  Dispositivo de salida (loopback)
+     [S]  iPhone como mic por defecto  ON
+     [L]  Listar todos los dispositivos
+     [R]  Reiniciar enlace
+     [Q]  Salir
+   ```
+
+   Todo se ajusta **en vivo** con una tecla — nada de argumentos. Al salir (`Q`)
+   se **restauran** tus dispositivos de audio originales.
+
+Banderas opcionales (para arrancar con un valor; el menú hace lo mismo):
 
 | Flag | Efecto |
 |------|--------|
-| `--list` | Lista dispositivos de reproducción y grabación y sale. |
-| `--no-default-switch` | No cambia el micrófono por defecto de Windows. |
-| `--gain X` | Multiplica el volumen del audio enviado al iPhone (p.ej. `--gain 4`). |
-| `--mute-pc` | Silencia la salida de la PC al conectar (solo si tu tarjeta lo permite — ver nota). |
+| `--list` | Lista dispositivos y sale (sin abrir el menú). |
+| `--no-default-switch` | Arranca sin cambiar el micrófono por defecto. |
+| `--gain X` | Arranca con esa ganancia (p.ej. `--gain 4`). |
+| `--mute-pc` | Arranca con la salida de la PC muteada (solo si tu tarjeta lo permite). |
 | `--port N` | Puerto del túnel hacia la app (por defecto `7001`). |
 
 ## Compilar desde el código

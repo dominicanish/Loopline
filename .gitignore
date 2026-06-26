@@ -11,8 +11,9 @@ build/
 *.app
 *.dSYM.zip
 *.dSYM
-# XcodeGen generates the project locally / in CI:
+# XcodeGen generates these from project.yml (locally / in CI):
 ios/Loopline.xcodeproj/
+ios/Loopline/Info.plist
 
 # ---- .NET ----
 bin/

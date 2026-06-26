@@ -11,7 +11,7 @@ final class AppModel: ObservableObject {
 
     @Published var status: Status = .waiting
     @Published var peerName: String = ""
-    @Published var micEnabled: Bool = false { didSet { audio.micEnabled = micEnabled } }
+    @Published var micEnabled: Bool = false { didSet { applyMic() } }
     @Published var speakerEnabled: Bool = true { didSet { audio.speakerEnabled = speakerEnabled } }
     @Published var micLevel: Float = 0
     @Published var speakerLevel: Float = 0
@@ -68,18 +68,40 @@ final class AppModel: ObservableObject {
 
     private func beginSession(micGranted: Bool) {
         guard running else { return }  // stopped while the prompt was up
-        if !micGranted { micEnabled = false }
-        audio.micEnabled = micEnabled && micGranted
         audio.speakerEnabled = speakerEnabled
         audio.echoCancellation = echoCancellation
         do {
-            try audio.start(captureEnabled: micGranted)
+            try audio.start()
             audio.setOutputVolume(Float(speakerVolume))
         } catch {
             NSLog("Loopline: audio start failed \(error)")
         }
+        if micGranted {
+            if micEnabled { audio.startMic() }
+        } else {
+            micEnabled = false
+        }
         link.start()
         startMeters()
+    }
+
+    /// Apply the mic toggle at runtime (idempotent), requesting permission if needed.
+    private func applyMic() {
+        guard running else { return }
+        guard micEnabled else { audio.stopMic(); return }
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted:
+            audio.startMic()
+        case .denied:
+            micEnabled = false
+        default:
+            AVAudioApplication.requestRecordPermission { [weak self] granted in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if granted { self.audio.startMic() } else { self.micEnabled = false }
+                }
+            }
+        }
     }
 
     func stop() {

@@ -1,170 +1,218 @@
 import Foundation
 import AVFoundation
+import os
 
-/// Captures the microphone and plays back PCM coming from the PC.
+/// Plays the PC audio stream and (optionally) captures the mic to send back.
 ///
-/// Uses `.playAndRecord` + `.voiceChat` so iOS applies hardware echo
-/// cancellation — essential when the phone is a loudspeaker and a microphone
-/// at the same time, otherwise the PC would hear its own output echoed back.
+/// Playback uses a jitter buffer (ported from the proven DeskLink receiver):
+/// incoming int16 frames are converted to float and written into a ring buffer;
+/// an `AVAudioSourceNode` *pulls* from it on the audio thread. We pre-roll until
+/// ~100 ms has buffered, then play continuously; if we drift too far ahead we
+/// drop the oldest audio, and on underrun we output silence (never garbage).
+/// This is what keeps playback clean — a ring with no pre-roll under-runs
+/// constantly and sounds choppy.
 final class AudioEngine {
     /// Called on the audio thread with a 48 kHz mono int16 packet from the mic.
     var onMicData: ((Data) -> Void)?
-    /// Latest linear levels (0...1) for the UI meters.
     private(set) var micLevel: Float = 0
     private(set) var spkLevel: Float = 0
 
-    /// Gates: only send mic / only render speaker when enabled.
-    var micEnabled = false
+    /// When false, incoming audio is dropped (listening paused).
     var speakerEnabled = true
-    /// When true use `.voiceChat` (hardware echo cancellation); otherwise `.default`.
+    /// When true the mic session uses `.voiceChat` (echo cancellation); else `.default`.
     var echoCancellation = true
 
     private let engine = AVAudioEngine()
+    private let sampleRate: Double = 48_000
+
+    // SPSC ring buffer of mono float frames.
+    private let capFrames = 48_000 * 4            // 4 s headroom
+    private var ring: [Float]
+    private var writeIdx = 0
+    private var readIdx = 0
+    private var lock = os_unfair_lock()
+    private var playing = false                   // false until the jitter buffer fills
+    private let targetFrames = Int(48_000 * 0.1)  // ~100 ms pre-roll
+
     private var sourceNode: AVAudioSourceNode?
-    private let playbackBuffer = FloatRingBuffer(capacity: Int(AudioFormatSpec.sampleRate) * 2) // 2 s
-    private let wireFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
-                                           sampleRate: AudioFormatSpec.sampleRate,
-                                           channels: AudioFormatSpec.channels,
-                                           interleaved: true)!
+    private lazy var playFormat = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate,
+                                                channels: 1, interleaved: false)!
+    private var outputVolume: Float = 1
+
+    private var micActive = false
+    private var recordSessionActive = false
+    private lazy var micWireFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48_000,
+                                                   channels: 1, interleaved: true)!
     private var micConverter: AVAudioConverter?
-    private var running = false
 
-    // MARK: - Lifecycle
+    init() { ring = [Float](repeating: 0, count: capFrames) }
 
-    func start(captureEnabled: Bool = true) throws {
-        guard !running else { return }
-        try configureSession()
+    // MARK: Lifecycle
 
-        let output = engine.outputNode
-        let mainMixer = engine.mainMixerNode
-
-        // Playback path: a source node pulls mono float samples from the ring.
-        let srcFormat = AVAudioFormat(standardFormatWithSampleRate: AudioFormatSpec.sampleRate, channels: 1)!
-        let source = AVAudioSourceNode(format: srcFormat) { [weak self] _, _, frameCount, audioBufferList -> OSStatus in
-            let abl = UnsafeMutableAudioBufferListPointer(audioBufferList)
-            guard let self else {
-                for buffer in abl { memset(buffer.mData, 0, Int(buffer.mDataByteSize)) }
-                return noErr
-            }
-            let n = Int(frameCount)
-            let ptr = abl[0].mData!.assumingMemoryBound(to: Float.self)
-            let dst = UnsafeMutableBufferPointer(start: ptr, count: n)
-            if self.speakerEnabled {
-                self.playbackBuffer.read(into: dst)
-            } else {
-                for i in 0 ..< n { dst[i] = 0 }
-            }
-            // Duplicate to any extra channels.
-            for ch in 1 ..< abl.count {
-                if let m = abl[ch].mData { memcpy(m, ptr, n * MemoryLayout<Float>.size) }
-            }
-            self.spkLevel = AudioEngine.rms(dst)
-            return noErr
-        }
-        self.sourceNode = source
-        engine.attach(source)
-        engine.connect(source, to: mainMixer, format: srcFormat)
-        engine.connect(mainMixer, to: output, format: nil)
-
-        // Capture path: tap the input node and convert to the wire format.
-        // Only when we actually hold mic permission AND the input format is
-        // valid — connecting a 0 Hz / 0-channel input node crashes CoreAudio.
-        let input = engine.inputNode
-        let inFormat = input.inputFormat(forBus: 0)
-        if captureEnabled, inFormat.sampleRate > 0, inFormat.channelCount > 0 {
-            micConverter = AVAudioConverter(from: inFormat, to: wireFormat)
-            input.installTap(onBus: 0, bufferSize: 1024, format: inFormat) { [weak self] buffer, _ in
-                self?.handleMic(buffer)
-            }
-        } else if captureEnabled {
-            NSLog("Loopline: mic input unavailable (format \(inFormat)); running playback-only")
-        }
-
-        engine.prepare()
-        try engine.start()
-        running = true
+    /// Start in playback-only (`.playback`) mode — high quality and it never
+    /// touches the mic input node (which would crash without permission). We
+    /// upgrade to `.playAndRecord` lazily in `startMic()`.
+    func start() throws {
+        let session = AVAudioSession.sharedInstance()
+        try session.setCategory(.playback, mode: .default, options: [])
+        try session.setPreferredSampleRate(sampleRate)
+        try session.setPreferredIOBufferDuration(0.01)
+        try session.setActive(true)
+        try startPlaybackGraph()
     }
 
     func stop() {
-        guard running else { return }
-        engine.inputNode.removeTap(onBus: 0)
-        engine.stop()
-        if let s = sourceNode { engine.detach(s) }
-        sourceNode = nil
-        playbackBuffer.clear()
-        running = false
+        stopMic()
+        recordSessionActive = false
+        if engine.isRunning { engine.stop() }
+        if let n = sourceNode { engine.detach(n); sourceNode = nil }
+        resetJitter()
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
 
-    // MARK: - Incoming speaker PCM (from PC)
+    func setOutputVolume(_ v: Float) {
+        outputVolume = max(0, min(1, v))
+        engine.mainMixerNode.outputVolume = outputVolume
+    }
 
-    /// Feed a 48 kHz mono int16 packet to the speaker ring buffer.
+    private func startPlaybackGraph() throws {
+        if engine.isRunning { engine.stop() }
+        if sourceNode == nil {
+            let node = AVAudioSourceNode(format: playFormat) { [weak self] _, _, frameCount, abl -> OSStatus in
+                self?.render(frameCount: Int(frameCount), abl: abl) ?? noErr
+            }
+            engine.attach(node)
+            sourceNode = node
+        }
+        engine.connect(sourceNode!, to: engine.mainMixerNode, format: playFormat)
+        engine.mainMixerNode.outputVolume = outputVolume
+        resetJitter()
+        engine.prepare()
+        try engine.start()
+    }
+
+    private func resetJitter() {
+        os_unfair_lock_lock(&lock); writeIdx = 0; readIdx = 0; playing = false; os_unfair_lock_unlock(&lock)
+    }
+
+    // MARK: Playback (PC -> phone)
+
+    /// Feed one 48 kHz mono int16 packet into the ring. Called off the audio thread.
     func enqueueSpeaker(_ data: Data) {
         guard speakerEnabled else { return }
-        data.withUnsafeBytes { raw in
+        let count = data.count / 2
+        guard count > 0 else { return }
+        var sum: Float = 0
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
             let i16 = raw.bindMemory(to: Int16.self)
-            var floats = [Float](repeating: 0, count: i16.count)
-            for i in 0 ..< i16.count { floats[i] = Float(i16[i]) / 32768.0 }
-            floats.withUnsafeBufferPointer { playbackBuffer.write($0) }
+            os_unfair_lock_lock(&lock)
+            var w = writeIdx
+            for f in 0..<count {
+                let s = Float(Int16(littleEndian: i16[f])) / 32768.0
+                ring[w % capFrames] = s
+                sum += s * s
+                w += 1
+            }
+            writeIdx = w
+            if writeIdx - readIdx > capFrames { readIdx = writeIdx - targetFrames }
+            os_unfair_lock_unlock(&lock)
         }
+        spkLevel = min(1, (sum / Float(count)).squareRoot() * 4)
     }
 
-    // MARK: - Private
+    private func render(frameCount n: Int, abl audioBufferList: UnsafeMutablePointer<AudioBufferList>) -> OSStatus {
+        let abl = UnsafeMutableAudioBufferListPointer(audioBufferList)
+        let out = abl[0].mData!.assumingMemoryBound(to: Float.self)
 
-    /// Sets the playback volume of the incoming (computer) audio. 0...1.
-    func setOutputVolume(_ v: Float) {
-        engine.mainMixerNode.outputVolume = max(0, min(1, v))
+        os_unfair_lock_lock(&lock)
+        let available = writeIdx - readIdx
+        if !playing {
+            if available >= targetFrames {
+                playing = true
+            } else {
+                for i in 0..<n { out[i] = 0 }
+                os_unfair_lock_unlock(&lock)
+                return noErr
+            }
+        }
+        // Drop-oldest if we drifted too far ahead (bounds latency).
+        let maxBuf = targetFrames * 2 + Int(sampleRate * 0.1)
+        if available > maxBuf { readIdx = writeIdx - targetFrames }
+
+        var produced = 0
+        while produced < n {
+            if readIdx >= writeIdx {              // underrun → silence, re-arm pre-roll
+                for i in produced..<n { out[i] = 0 }
+                playing = false
+                break
+            }
+            out[produced] = ring[readIdx % capFrames]
+            readIdx += 1; produced += 1
+        }
+        os_unfair_lock_unlock(&lock)
+        return noErr
     }
 
-    private func configureSession() throws {
-        let session = AVAudioSession.sharedInstance()
-        let mode: AVAudioSession.Mode = echoCancellation ? .voiceChat : .default
-        try session.setCategory(.playAndRecord, mode: mode,
-                                options: [.defaultToSpeaker, .allowBluetoothA2DP, .allowBluetoothHFP])
-        try session.setPreferredSampleRate(AudioFormatSpec.sampleRate)
-        try session.setPreferredIOBufferDuration(0.01)
-        try session.setActive(true, options: [])
-        try? session.overrideOutputAudioPort(.speaker)
+    // MARK: Mic (phone -> PC)
+
+    /// Enable mic capture. Caller guarantees record permission is granted.
+    @discardableResult
+    func startMic() -> Bool {
+        guard !micActive else { return true }
+        if !recordSessionActive {
+            do {
+                let session = AVAudioSession.sharedInstance()
+                let mode: AVAudioSession.Mode = echoCancellation ? .voiceChat : .default
+                try session.setCategory(.playAndRecord, mode: mode, options: [.defaultToSpeaker])
+                try session.setPreferredSampleRate(sampleRate)
+                try session.setPreferredIOBufferDuration(0.01)
+                try session.setActive(true)
+                try? session.overrideOutputAudioPort(.speaker)
+                try startPlaybackGraph()
+                recordSessionActive = true
+            } catch {
+                recordSessionActive = false
+                try? start()    // roll back to playback-only
+                return false
+            }
+        }
+        micConverter = nil
+        engine.inputNode.installTap(onBus: 0, bufferSize: 1024, format: nil) { [weak self] buffer, _ in
+            self?.handleMicBuffer(buffer)
+        }
+        micActive = true
+        return true
     }
 
-    private func handleMic(_ buffer: AVAudioPCMBuffer) {
-        guard let converter = micConverter else { return }
-        let ratio = wireFormat.sampleRate / buffer.format.sampleRate
-        let outCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio + 64)
-        guard let out = AVAudioPCMBuffer(pcmFormat: wireFormat, frameCapacity: outCapacity) else { return }
+    func stopMic() {
+        guard micActive else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        micActive = false
+    }
 
+    private func handleMicBuffer(_ buffer: AVAudioPCMBuffer) {
+        let inFormat = buffer.format
+        if micConverter == nil
+            || micConverter!.inputFormat.sampleRate != inFormat.sampleRate
+            || micConverter!.inputFormat.channelCount != inFormat.channelCount {
+            micConverter = AVAudioConverter(from: inFormat, to: micWireFormat)
+        }
+        guard let conv = micConverter, buffer.frameLength > 0 else { return }
+        let ratio = micWireFormat.sampleRate / inFormat.sampleRate
+        let cap = AVAudioFrameCount(Double(buffer.frameLength) * ratio + 16)
+        guard cap > 0, let out = AVAudioPCMBuffer(pcmFormat: micWireFormat, frameCapacity: cap) else { return }
         var fed = false
         var err: NSError?
-        converter.convert(to: out, error: &err) { _, status in
+        conv.convert(to: out, error: &err) { _, status in
             if fed { status.pointee = .noDataNow; return nil }
-            fed = true
-            status.pointee = .haveData
-            return buffer
+            fed = true; status.pointee = .haveData; return buffer
         }
-        if let err { NSLog("Loopline: mic convert error \(err)"); return }
-        guard out.frameLength > 0, let ch = out.int16ChannelData else { return }
-
+        guard err == nil, out.frameLength > 0, let ch = out.int16ChannelData else { return }
         let count = Int(out.frameLength)
         let samples = UnsafeBufferPointer(start: ch[0], count: count)
-        micLevel = AudioEngine.rms16(samples)
-
-        if micEnabled {
-            let data = Data(bytes: ch[0], count: count * MemoryLayout<Int16>.size)
-            onMicData?(data)
-        }
-    }
-
-    private static func rms(_ s: UnsafeMutableBufferPointer<Float>) -> Float {
-        guard s.count > 0 else { return 0 }
         var sum: Float = 0
-        for v in s { sum += v * v }
-        return min(1, (sum / Float(s.count)).squareRoot() * 4)
-    }
-
-    private static func rms16(_ s: UnsafeBufferPointer<Int16>) -> Float {
-        guard s.count > 0 else { return 0 }
-        var sum: Float = 0
-        for v in s { let f = Float(v) / 32768.0; sum += f * f }
-        return min(1, (sum / Float(s.count)).squareRoot() * 4)
+        for v in samples { let f = Float(v) / 32768.0; sum += f * f }
+        micLevel = min(1, (sum / Float(count)).squareRoot() * 4)
+        onMicData?(Data(bytes: ch[0], count: count * 2))
     }
 }

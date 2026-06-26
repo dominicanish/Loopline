@@ -171,6 +171,7 @@ struct SessionView: View {
                               : LinearGradient(colors: [Palette.green, Palette.green],
                                                startPoint: .top, endPoint: .bottom))
                 )
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         }
         .buttonStyle(.plain)
     }

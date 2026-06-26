@@ -31,6 +31,7 @@ struct ConnectView: View {
                                     .foregroundStyle(.tertiary)
                             }
                             .padding(.horizontal, 16).padding(.vertical, 13)
+                            .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
                     }

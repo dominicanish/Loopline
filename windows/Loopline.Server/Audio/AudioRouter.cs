@@ -56,6 +56,12 @@ public sealed class AudioRouter : IDisposable
             {
                 DiscardOnBufferOverflow = true,
                 BufferDuration = TimeSpan.FromSeconds(2),
+                // Critical: do NOT zero-fill on underrun. With the default (true)
+                // the pump reads full silent frames as fast as the CPU allows and
+                // floods the link with packets, overrunning the phone's buffer.
+                // false makes reads return only real captured audio, pacing the
+                // sender to real time.
+                ReadFully = false,
             };
             _capture.DataAvailable += (_, e) => _captureBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
             _capture.StartRecording();

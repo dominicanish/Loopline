@@ -113,6 +113,7 @@ struct ThemeToggleButton: View {
                 .font(.system(size: 16, weight: .medium))
                 .foregroundStyle(.primary)
                 .frame(width: 36, height: 36)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .glassEffect(.regular.interactive(), in: .circle)

@@ -184,9 +184,12 @@ static string Short(string name) => name.Length > 42 ? name[..42] + "…" : name
 
 static void Banner()
 {
-    Console.WriteLine("┌────────────────────────────────────────────┐");
-    Console.WriteLine("│  Loopline · iPhone como mic y altavoz (USB)  │");
-    Console.WriteLine("└────────────────────────────────────────────┘");
+    string title = "  Loopline · iPhone como mic y altavoz (USB)  ";
+    string bar = new string('─', title.Length);
+    Console.OutputEncoding = System.Text.Encoding.UTF8;
+    Console.WriteLine("┌" + bar + "┐");
+    Console.WriteLine("│" + title + "│");
+    Console.WriteLine("└" + bar + "┘");
 }
 
 static void Ok(string s)   => WriteTag("[ok] ", ConsoleColor.Green, s);

@@ -3,7 +3,7 @@ import SwiftUI
 struct ConnectView: View {
     @EnvironmentObject private var model: AppModel
     var goToSession: () -> Void
-    @AppStorage("colorSchemePref") private var schemePref = "light"
+    @AppStorage("colorSchemePref") private var schemePref = "system"
 
     private var connected: Bool { model.status == .connected }
 

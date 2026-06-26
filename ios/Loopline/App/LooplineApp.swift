@@ -3,7 +3,7 @@ import SwiftUI
 @main
 struct LooplineApp: App {
     @StateObject private var model = AppModel()
-    @AppStorage("colorSchemePref") private var schemePref = "light"
+    @AppStorage("colorSchemePref") private var schemePref = "system"
 
     var body: some Scene {
         WindowGroup {

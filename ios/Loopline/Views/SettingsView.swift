@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
-    @AppStorage("colorSchemePref") private var schemePref = "light"
+    @AppStorage("colorSchemePref") private var schemePref = "system"
     @AppStorage("latencyMode") private var latencyMode = "balanced"
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("keepAudioBackground") private var keepAudioBackground = true

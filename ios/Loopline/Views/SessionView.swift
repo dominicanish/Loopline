@@ -2,7 +2,7 @@ import SwiftUI
 
 struct SessionView: View {
     @EnvironmentObject private var model: AppModel
-    @AppStorage("colorSchemePref") private var schemePref = "light"
+    @AppStorage("colorSchemePref") private var schemePref = "system"
 
     private var connected: Bool { model.status == .connected }
 

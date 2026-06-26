@@ -1,0 +1,6 @@
+# Keep shell scripts and CI YAML LF-only so they run on the Linux/macOS runners.
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+# Swift / C# can stay platform-native; treat SVG/JSON as text.
+*.svg  text

@@ -1,0 +1,33 @@
+# ---- macOS / Xcode ----
+.DS_Store
+*.xcodeproj/*
+!*.xcodeproj/project.pbxproj
+!*.xcodeproj/xcshareddata/
+xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+build/
+*.ipa
+*.app
+*.dSYM.zip
+*.dSYM
+# XcodeGen generates the project locally / in CI:
+ios/Loopline.xcodeproj/
+
+# ---- .NET ----
+bin/
+obj/
+*.user
+artifacts/
+publish/
+*.exe
+*.dll
+*.pdb
+
+# ---- Misc ----
+*.log
+.idea/
+.vs/
+.vscode/
+Thumbs.db
+node_modules/

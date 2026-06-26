@@ -1,0 +1,112 @@
+name: build
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  ios:
+    name: iOS app (unsigned IPA)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          ls /Applications | grep -i Xcode || true
+          sudo xcode-select -s /Applications/Xcode_26.app 2>/dev/null || sudo xcode-select -s /Applications/Xcode.app
+          xcodebuild -version
+
+      - name: Install tools
+        run: brew install xcodegen librsvg imagemagick
+
+      - name: Generate app icon
+        run: bash ios/Scripts/make-icon.sh
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build (unsigned)
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -project Loopline.xcodeproj \
+            -scheme Loopline \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Package unsigned IPA
+        working-directory: ios
+        run: |
+          APP="build/Build/Products/Release-iphoneos/Loopline.app"
+          test -d "$APP"
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry Loopline-unsigned.ipa Payload
+          ls -la Loopline-unsigned.ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Loopline-iOS-unsigned
+          path: ios/Loopline-unsigned.ipa
+          if-no-files-found: error
+
+  windows:
+    name: Windows server (.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish self-contained exe
+        run: >
+          dotnet publish windows/Loopline.Server/Loopline.Server.csproj
+          -c Release -r win-x64 --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -o publish
+
+      - name: Upload server artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Loopline-Windows-server
+          path: publish/Loopline.Server.exe
+          if-no-files-found: error
+
+  release:
+    name: Publish release
+    needs: [ ios, windows ]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+
+      - name: Show files
+        run: find dist -type f
+
+      - name: Create / update release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/Loopline-iOS-unsigned/Loopline-unsigned.ipa
+            dist/Loopline-Windows-server/Loopline.Server.exe
+          generate_release_notes: true

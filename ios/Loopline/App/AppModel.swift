@@ -39,17 +39,37 @@ final class AppModel: ObservableObject {
 
     func start() {
         guard !running else { return }
-        AVAudioApplication.requestRecordPermission { _ in }
-        audio.micEnabled = micEnabled
+        // Mark running immediately so the UI reflects the tap, but only touch the
+        // audio HW after the mic permission prompt resolves — starting a
+        // playAndRecord engine with an undetermined permission crashes CoreAudio.
+        running = true
+        UIApplication.shared.isIdleTimerDisabled = true
+
+        let begin: (Bool) -> Void = { [weak self] granted in
+            Task { @MainActor in self?.beginSession(micGranted: granted) }
+        }
+
+        switch AVAudioApplication.shared.recordPermission {
+        case .granted:
+            begin(true)
+        case .denied:
+            begin(false)
+        default:
+            AVAudioApplication.requestRecordPermission(completionHandler: begin)
+        }
+    }
+
+    private func beginSession(micGranted: Bool) {
+        guard running else { return }  // stopped while the prompt was up
+        if !micGranted { micEnabled = false }
+        audio.micEnabled = micEnabled && micGranted
         audio.speakerEnabled = speakerEnabled
         do {
-            try audio.start()
+            try audio.start(captureEnabled: micGranted)
         } catch {
             NSLog("Loopline: audio start failed \(error)")
         }
         link.start()
-        running = true
-        UIApplication.shared.isIdleTimerDisabled = true
         startMeters()
     }
 

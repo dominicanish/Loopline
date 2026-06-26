@@ -29,7 +29,7 @@ final class AudioEngine {
 
     // MARK: - Lifecycle
 
-    func start() throws {
+    func start(captureEnabled: Bool = true) throws {
         guard !running else { return }
         try configureSession()
 
@@ -65,11 +65,17 @@ final class AudioEngine {
         engine.connect(mainMixer, to: output, format: nil)
 
         // Capture path: tap the input node and convert to the wire format.
+        // Only when we actually hold mic permission AND the input format is
+        // valid — connecting a 0 Hz / 0-channel input node crashes CoreAudio.
         let input = engine.inputNode
         let inFormat = input.inputFormat(forBus: 0)
-        micConverter = AVAudioConverter(from: inFormat, to: wireFormat)
-        input.installTap(onBus: 0, bufferSize: 1024, format: inFormat) { [weak self] buffer, _ in
-            self?.handleMic(buffer)
+        if captureEnabled, inFormat.sampleRate > 0, inFormat.channelCount > 0 {
+            micConverter = AVAudioConverter(from: inFormat, to: wireFormat)
+            input.installTap(onBus: 0, bufferSize: 1024, format: inFormat) { [weak self] buffer, _ in
+                self?.handleMic(buffer)
+            }
+        } else if captureEnabled {
+            NSLog("Loopline: mic input unavailable (format \(inFormat)); running playback-only")
         }
 
         engine.prepare()

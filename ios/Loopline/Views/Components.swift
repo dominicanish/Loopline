@@ -92,37 +92,33 @@ struct ConnectionOrb: View {
     var peerName: String
 
     var body: some View {
-        ZStack {
-            ForEach(0 ..< 3, id: \.self) { ring in
-                Circle()
-                    .strokeBorder(.white.opacity(0.18), lineWidth: 1)
-                    .scaleEffect(1 + CGFloat(ring) * 0.16 + CGFloat(level) * 0.12)
-                    .opacity(connected ? 1 : 0.4)
-                    .animation(.easeOut(duration: 0.15), value: level)
-            }
-            Circle()
-                .fill(.white.opacity(0.08))
-                .overlay(
-                    Image(systemName: connected ? "iphone.gen3" : "iphone.slash")
-                        .font(.system(size: 46, weight: .light))
-                        .foregroundStyle(.white)
-                )
-                .frame(width: 150, height: 150)
-                .glassEffect(.regular.interactive(), in: .circle)
-
-            VStack {
-                Spacer()
-                if connected {
-                    Text(peerName.isEmpty ? "Conectado" : peerName)
-                        .font(.footnote.weight(.medium))
-                        .foregroundStyle(.white)
-                    Text("\(latencyMs) ms")
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.7))
+        VStack(spacing: 14) {
+            ZStack {
+                ForEach(0 ..< 3, id: \.self) { ring in
+                    Circle()
+                        .strokeBorder(.white.opacity(0.18), lineWidth: 1)
+                        .scaleEffect(1 + CGFloat(ring) * 0.14 + CGFloat(level) * 0.10)
+                        .opacity(connected ? 1 : 0.4)
+                        .animation(.easeOut(duration: 0.15), value: level)
                 }
+                Circle()
+                    .fill(.white.opacity(0.08))
+                    .overlay(
+                        Image(systemName: connected ? "iphone.gen3" : "iphone.slash")
+                            .font(.system(size: 44, weight: .light))
+                            .foregroundStyle(.white)
+                    )
+                    .frame(width: 132, height: 132)
+                    .glassEffect(.regular.interactive(), in: .circle)
             }
-            .offset(y: 120)
+            .frame(width: 196, height: 196)
+
+            Text(connected ? (peerName.isEmpty ? "Conectado" : peerName) : "Sin conexión")
+                .font(.footnote.weight(.medium))
+                .foregroundStyle(.white)
+            Text(connected ? "\(latencyMs) ms" : "—")
+                .font(.caption2.monospacedDigit())
+                .foregroundStyle(.white.opacity(0.7))
         }
-        .frame(width: 230, height: 230)
     }
 }

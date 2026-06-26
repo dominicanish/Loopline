@@ -20,8 +20,8 @@ public sealed class ScreenStreamer : IDisposable
     private volatile bool _enabled;
 
     private const int MaxWidth = 1280;
-    private const int Fps = 15;
-    private const long Quality = 50;
+    private const int Fps = 60;
+    private const long Quality = 45;
 
     public void SetEnabled(bool on)
     {
@@ -39,7 +39,7 @@ public sealed class ScreenStreamer : IDisposable
         var encoder = ImageCodecInfo.GetImageEncoders().First(e => e.FormatID == ImageFormat.Jpeg.Guid);
         var ep = new EncoderParameters(1);
         ep.Param[0] = new EncoderParameter(Encoder.Quality, Quality);
-        int frameMs = Math.Max(20, 1000 / Fps);
+        int frameMs = Math.Max(2, 1000 / Fps);   // ~16ms target; actual fps is bounded by capture cost
 
         while (_running)
         {

@@ -14,6 +14,9 @@ enum WireType: UInt8 {
     case mouseScroll = 0x42   // [int16 delta LE]
     case keyText     = 0x43   // UTF-8 text to type
     case keyCode     = 0x44   // [u8 special code] (1=back,2=enter,3=tab,4=esc,5=L,6=R,7=U,8=D)
+    // Screen mirroring
+    case screenFrame   = 0x50 // PC → iPhone: a JPEG frame
+    case screenControl = 0x51 // iPhone → PC: [u8 on] start/stop streaming
 }
 
 /// Fixed audio format shared by both ends. No negotiation.

@@ -16,6 +16,8 @@ public sealed class PhoneSession : IDisposable
     public Action OnBye;
     /// <summary>Remote-control input from the phone's Screen trackpad.</summary>
     public Action<WireType, byte[]> OnInput;
+    /// <summary>Phone toggling screen mirroring on/off.</summary>
+    public Action<bool> OnScreenControl;
     public string PeerName { get; private set; } = "";
     public volatile int LatencyMs;
 
@@ -23,6 +25,7 @@ public sealed class PhoneSession : IDisposable
 
     public void SendHello(string name) => Send(WireType.Hello, Wire.Hello(name));
     public void SendSpeaker(byte[] pcm) => Send(WireType.SpkPcm, pcm);
+    public void SendScreenFrame(byte[] jpeg) => Send(WireType.ScreenFrame, jpeg);
 
     public void Send(WireType type, ReadOnlySpan<byte> payload)
     {
@@ -85,6 +88,9 @@ public sealed class PhoneSession : IDisposable
             case WireType.KeyText:
             case WireType.KeyCode:
                 OnInput?.Invoke(type, payload);
+                break;
+            case WireType.ScreenControl:
+                OnScreenControl?.Invoke(payload.Length > 0 && payload[0] != 0);
                 break;
         }
     }

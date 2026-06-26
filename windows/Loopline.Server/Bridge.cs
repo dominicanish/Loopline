@@ -90,12 +90,15 @@ public sealed class Bridge : IDisposable
                 using (owned)
                 using (var session = new PhoneSession(stream))
                 using (var router = new AudioRouter(Devices.MicRender, Devices.LoopbackRender, MutePc, Gain))
+                using (var screen = new ScreenStreamer())
                 {
                     _router = router;
                     session.OnMic = router.EnqueueMic;
                     router.OnSpeakerPacket = session.SendSpeaker;
                     session.OnPeerName = name => { PeerName = name; Connected = true; };
                     session.OnInput = (t, p) => _injector.Handle(t, p);
+                    screen.OnFrame = session.SendScreenFrame;
+                    session.OnScreenControl = on => screen.SetEnabled(on);
 
                     router.Start();
                     session.SendHello(Environment.MachineName);

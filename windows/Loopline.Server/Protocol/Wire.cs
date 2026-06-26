@@ -18,6 +18,9 @@ public enum WireType : byte
     MouseScroll = 0x42,   // [int16 delta LE]
     KeyText     = 0x43,   // UTF-8 text to type
     KeyCode     = 0x44,   // [u8 special code]
+    // Screen mirroring
+    ScreenFrame   = 0x50, // PC -> iPhone: a JPEG frame
+    ScreenControl = 0x51, // iPhone -> PC: [u8 on] start/stop streaming
 }
 
 /// <summary>Fixed audio format shared with the iPhone app (see docs/protocol.md).</summary>

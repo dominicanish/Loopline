@@ -14,7 +14,15 @@ struct ScreenView: View {
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.94).ignoresSafeArea()
+            Color.black.ignoresSafeArea()
+
+            if let img = model.screenImage {
+                Image(uiImage: img)
+                    .resizable()
+                    .interpolation(.medium)
+                    .aspectRatio(contentMode: .fit)
+                    .ignoresSafeArea()
+            }
 
             TrackpadView(
                 onMove: { dx, dy in
@@ -27,7 +35,7 @@ struct ScreenView: View {
             )
             .ignoresSafeArea()
 
-            hint.allowsHitTesting(false)
+            if model.screenImage == nil { hint.allowsHitTesting(false) }
 
             floatingButtons
 
@@ -37,18 +45,18 @@ struct ScreenView: View {
                 .frame(width: 0, height: 0)
         }
         .statusBarHidden(true)
-        .onAppear { Orientation.goLandscape() }
-        .onDisappear { keyboardActive = false; Orientation.goPortrait() }
+        .onAppear { Orientation.goLandscape(); model.setScreenStreaming(true) }
+        .onDisappear { keyboardActive = false; model.setScreenStreaming(false); Orientation.goPortrait() }
     }
 
     private var hint: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "hand.point.up.left").font(.system(size: 30))
-            Text("Trackpad").font(.headline)
+        VStack(spacing: 10) {
+            ProgressView().tint(.white)
+            Text("Waiting for the PC screen…").font(.headline)
             Text("Drag to move · tap to click · two fingers to scroll / right-click")
                 .font(.caption)
         }
-        .foregroundStyle(.white.opacity(0.28))
+        .foregroundStyle(.white.opacity(0.5))
     }
 
     private var floatingButtons: some View {

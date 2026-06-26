@@ -35,6 +35,8 @@ final class AppModel: ObservableObject {
     }
 
     @Published var connectedSince: Date?
+    /// Latest mirrored PC screen frame (only while on the Screen tab).
+    @Published var screenImage: UIImage?
 
     static func latencyMs(for mode: String) -> Double {
         switch mode {
@@ -124,6 +126,7 @@ final class AppModel: ObservableObject {
         meterTimer?.invalidate(); meterTimer = nil
         pingTimer?.invalidate(); pingTimer = nil
         micLevel = 0; speakerLevel = 0
+        screenImage = nil
     }
 
     // MARK: - Remote input (Screen trackpad → PC)
@@ -158,6 +161,12 @@ final class AppModel: ObservableObject {
     func sendKeyText(_ s: String) { link.send(.keyText, Data(s.utf8)) }
     func sendKeyCode(_ code: UInt8) { link.send(.keyCode, Data([code])) }
 
+    /// Ask the PC to start/stop mirroring its screen (only while on Screen tab).
+    func setScreenStreaming(_ on: Bool) {
+        link.send(.screenControl, Data([on ? 1 : 0]))
+        if !on { screenImage = nil }
+    }
+
     // MARK: - Link
 
     private func handleLinkState(_ state: USBLink.State) {
@@ -183,6 +192,12 @@ final class AppModel: ObservableObject {
         switch type {
         case .spkPCM:
             audio.enqueueSpeaker(payload)
+        case .screenFrame:
+            // Decode off the link queue so audio parsing isn't blocked.
+            DispatchQueue.global(qos: .userInitiated).async {
+                let img = UIImage(data: payload)
+                Task { @MainActor in self.screenImage = img }
+            }
         case .hello:
             if let hello = Hello.decode(payload) {
                 Task { @MainActor in

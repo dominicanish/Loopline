@@ -32,9 +32,9 @@ Apple Devices, así que no toca la red.
    AVAudioEngine ◄── PCM 48 kHz mono int16 ─┤
                                             │  usbmux (Apple Mobile Device Service :27015)
  PC (Loopline.Server, .NET + NAudio)        │
-   CABLE-A Input  ◄── mic del iPhone        │  apps graban de  CABLE-A Output
-   CABLE-B Output ──► audio de apps ────────┘  apps reproducen en CABLE-B Input
-   IPolicyConfig: fija los "default device" al iniciar y los restaura al salir
+   CABLE Input ◄── mic del iPhone           │  apps graban de CABLE Output
+   loopback ──► audio real de la PC ────────┘  (salida real silenciada al conectar)
+   IPolicyConfig: pone el mic virtual como default y lo restaura al salir
 ```
 
 El protocolo de cable está documentado en [`docs/protocol.md`](docs/protocol.md).
@@ -44,10 +44,11 @@ El protocolo de cable está documentado en [`docs/protocol.md`](docs/protocol.md
 **PC (Windows 10/11):**
 - **Apple Devices** (o iTunes) instalado — provee el servicio usbmux. Si tu
   iPhone aparece en el Explorador al conectarlo, ya lo tienes.
-- **Dos cables de audio virtuales** para full-duplex. Recomendado:
-  [VB-CABLE A+B](https://vb-audio.com/Cable/) (gratis) o
-  [VoiceMeeter](https://vb-audio.com/Voicemeeter/). Con un solo VB-Cable,
-  Loopline funciona en **half-duplex** (mic *o* altavoz).
+- **Un cable de audio virtual** para el micrófono:
+  [VB-CABLE](https://vb-audio.com/Cable/) (gratis). **No necesitas un segundo
+  cable**: el audio de la PC se captura por *loopback* del dispositivo de salida
+  real y esa salida se **silencia** mientras el iPhone está conectado (igual que
+  OBS graba el audio del escritorio aunque las bocinas estén en mute).
 
 **iPhone:** iOS 26 o superior.
 
@@ -99,7 +100,8 @@ Banderas útiles del servidor:
 | Flag | Efecto |
 |------|--------|
 | `--list` | Lista dispositivos de reproducción y grabación y sale. |
-| `--no-default-switch` | No cambia los dispositivos por defecto de Windows. |
+| `--no-default-switch` | No cambia el micrófono por defecto de Windows. |
+| `--no-mute-pc` | No silencia la salida de la PC mientras el iPhone está conectado. |
 | `--port N` | Puerto del túnel hacia la app (por defecto `7001`). |
 
 ## Compilar desde el código
@@ -123,7 +125,9 @@ Detalles de la configuración de audio en Windows:
 ## Limitaciones / notas
 
 - La firma gratis de sideload caduca cada 7 días (límite de Apple).
-- Full-duplex requiere **dos** cables virtuales; con uno solo es half-duplex.
+- Mientras el iPhone está conectado, la salida de la PC queda en **mute** (para
+  que el audio solo salga del teléfono). Se restaura al desconectar/cerrar, o
+  usa `--no-mute-pc` para desactivarlo.
 - `IPolicyConfig` es una API no documentada de Windows (la que usan nircmd y
   similares) — estable en la práctica, pero no oficial.
 - Pensado para uso personal en tu propio equipo.

@@ -8,6 +8,7 @@ const int defaultPort = 7001;
 
 bool listOnly = args.Contains("--list");
 bool noSwitch = args.Contains("--no-default-switch");
+bool noMutePc = args.Contains("--no-mute-pc");
 int port = ReadIntArg(args, "--port", defaultPort);
 
 Banner();
@@ -27,36 +28,29 @@ if (listOnly)
 var devices = picker.Resolve();
 ReportDevices(devices);
 
-if (!devices.IsComplete)
+if (devices.MicRender == null)
 {
-    Warn("No encontré los cables virtuales necesarios. Instala VB-Cable A+B (o VoiceMeeter)\n" +
-         "      y vuelve a correr. Usa `Loopline.Server --list` para ver tus dispositivos.");
+    Warn("No encontré un cable de audio virtual para el micrófono. Instala VB-CABLE\n" +
+         "      (gratis) y vuelve a correr. Usa `Loopline.Server --list` para verlos.");
 }
-else if (IsSingleCable(devices))
+if (devices.LoopbackRender == null)
 {
-    Warn("Detecté UN SOLO cable virtual (sin A/B). El micrófono funciona, pero el\n" +
-         "      altavoz comparte el mismo cable, así que el audio de la PC puede no oírse\n" +
-         "      o mezclarse con tu micrófono. Para full-duplex instala VB-CABLE A+B\n" +
-         "      (gratis) — ver docs/setup-windows.md.");
-    Info("Para verificar el altavoz: reproduce algo en la PC y observa el medidor 'spk'\n" +
-         "      abajo. Si no se mueve, el audio de la PC no está entrando al cable.");
+    Warn("No pude leer el dispositivo de salida por defecto (no podré enviar el audio\n" +
+         "      de la PC al iPhone).");
 }
 
-// Switch Windows defaults so every app routes through Loopline, and remember
-// the originals so we can restore them on exit.
+// Make the iPhone mic the default recording device so every app picks it up.
+// The speaker path uses loopback + mute instead of switching playback.
 var switcher = new DefaultDeviceSwitcher();
-string prevPlayback = null, prevRecording = null;
+string prevRecording = null;
 bool switched = false;
 
-if (!noSwitch && devices.DefaultPlayback != null && devices.DefaultRecording != null)
+if (!noSwitch && devices.DefaultRecording != null)
 {
-    prevPlayback = switcher.GetDefault(DataFlow.Render);
     prevRecording = switcher.GetDefault(DataFlow.Capture);
-    switcher.SetDefault(devices.DefaultPlayback.ID);
     switcher.SetDefault(devices.DefaultRecording.ID);
     switched = true;
-    Ok($"Default de Windows → playback: {Short(devices.DefaultPlayback.FriendlyName)} | " +
-       $"recording: {Short(devices.DefaultRecording.FriendlyName)}");
+    Ok($"Micrófono por defecto → {Short(devices.DefaultRecording.FriendlyName)}");
 }
 
 var cts = new CancellationTokenSource();
@@ -68,10 +62,9 @@ void Restore()
     restored = true;
     if (switched)
     {
-        try { switcher.SetDefault(prevPlayback); } catch { }
         try { switcher.SetDefault(prevRecording); } catch { }
         Console.WriteLine();
-        Ok("Dispositivos de audio por defecto restaurados.");
+        Ok("Micrófono por defecto restaurado.");
     }
 }
 
@@ -102,7 +95,7 @@ while (!cts.IsCancellationRequested)
 
         using (owned)
         using (var session = new PhoneSession(stream))
-        using (var router = new AudioRouter(devices.MicRender, devices.SpeakerCapture))
+        using (var router = new AudioRouter(devices.MicRender, devices.LoopbackRender, mutePc: !noMutePc))
         {
             session.OnMic = router.EnqueueMic;
             router.OnSpeakerPacket = session.SendSpeaker;
@@ -178,21 +171,13 @@ static int ReadIntArg(string[] args, string name, int fallback)
 static void ReportDevices(RoutedDevices d)
 {
     Console.WriteLine("Ruteo de audio:");
-    Line("  mic del iPhone  → ", d.MicRender);
-    Line("  audio de la PC  ← ", d.SpeakerCapture);
+    Line("  mic del iPhone   → ", d.MicRender);
+    Line("  audio de la PC   ← loopback de ", d.LoopbackRender);
+    Console.WriteLine("  (la salida de la PC se silencia mientras el iPhone esté conectado)");
     Console.WriteLine();
 
     static void Line(string label, MMDevice dev) =>
         Console.WriteLine(label + (dev != null ? Short(dev.FriendlyName) : "(no encontrado)"));
-}
-
-static bool IsSingleCable(RoutedDevices d)
-{
-    if (d.MicRender == null || d.SpeakerCapture == null) return false;
-    string[] twoCableHints = { "CABLE-A", "CABLE-B", "VoiceMeeter" };
-    bool mic = twoCableHints.Any(h => d.MicRender.FriendlyName.Contains(h, StringComparison.OrdinalIgnoreCase));
-    bool spk = twoCableHints.Any(h => d.SpeakerCapture.FriendlyName.Contains(h, StringComparison.OrdinalIgnoreCase));
-    return !mic && !spk;
 }
 
 static string Short(string name) => name.Length > 42 ? name[..42] + "…" : name;

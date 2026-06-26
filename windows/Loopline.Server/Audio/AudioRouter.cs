@@ -7,34 +7,40 @@ namespace Loopline.Server.Audio;
 
 /// <summary>
 /// Bridges Windows audio and the phone link:
-///  - captures PC output (a virtual-cable record endpoint) → emits 48 kHz mono
-///    int16 packets for the phone's speaker;
-///  - renders phone-mic packets to a virtual-cable playback endpoint so apps see
-///    them as a microphone.
+///  - speaker path: a WASAPI *loopback* of the PC's real playback device is sent
+///    to the phone, and that device is muted while connected so the audio only
+///    comes out of the iPhone. (Loopback still captures while muted — the mute is
+///    applied at the endpoint, after the loopback tap.)
+///  - mic path: phone-mic packets are rendered to a virtual-cable playback
+///    endpoint so apps see them as a microphone.
 /// </summary>
 public sealed class AudioRouter : IDisposable
 {
     private static readonly WaveFormat Wire = new WaveFormat(AudioSpec.SampleRate, 16, AudioSpec.Channels);
 
     private readonly MMDevice _micRender;
-    private readonly MMDevice _speakerCapture;
+    private readonly MMDevice _loopbackRender;
+    private readonly bool _mutePc;
 
-    private WasapiCapture _capture;
+    private WasapiLoopbackCapture _capture;
     private WasapiOut _output;
     private BufferedWaveProvider _captureBuffer;
     private BufferedWaveProvider _micBuffer;
     private Thread _pump;
     private volatile bool _running;
+    private bool _prevMute;
+    private bool _didMute;
 
     /// <summary>Raised with a 48 kHz mono int16 packet to forward to the phone speaker.</summary>
     public Action<byte[]> OnSpeakerPacket;
     public volatile float MicLevel;
     public volatile float SpeakerLevel;
 
-    public AudioRouter(MMDevice micRender, MMDevice speakerCapture)
+    public AudioRouter(MMDevice micRender, MMDevice loopbackRender, bool mutePc)
     {
         _micRender = micRender;
-        _speakerCapture = speakerCapture;
+        _loopbackRender = loopbackRender;
+        _mutePc = mutePc;
     }
 
     public void Start()
@@ -42,10 +48,10 @@ public sealed class AudioRouter : IDisposable
         if (_running) return;
         _running = true;
 
-        // --- Capture path: PC output -> phone ---
-        if (_speakerCapture != null)
+        // --- Speaker path: loopback of the real playback device -> phone ---
+        if (_loopbackRender != null)
         {
-            _capture = new WasapiCapture(_speakerCapture);
+            _capture = new WasapiLoopbackCapture(_loopbackRender);
             _captureBuffer = new BufferedWaveProvider(_capture.WaveFormat)
             {
                 DiscardOnBufferOverflow = true,
@@ -54,11 +60,22 @@ public sealed class AudioRouter : IDisposable
             _capture.DataAvailable += (_, e) => _captureBuffer.AddSamples(e.Buffer, 0, e.BytesRecorded);
             _capture.StartRecording();
 
-            _pump = new Thread(PumpCapture) { IsBackground = true, Name = "Loopline-capture" };
+            _pump = new Thread(PumpCapture) { IsBackground = true, Name = "Loopline-loopback" };
             _pump.Start();
+
+            if (_mutePc)
+            {
+                try
+                {
+                    _prevMute = _loopbackRender.AudioEndpointVolume.Mute;
+                    _loopbackRender.AudioEndpointVolume.Mute = true;
+                    _didMute = true;
+                }
+                catch { /* keep going; audio still bridges, PC just isn't muted */ }
+            }
         }
 
-        // --- Render path: phone mic -> CABLE input ---
+        // --- Mic path: phone mic -> CABLE input ---
         if (_micRender != null)
         {
             _micBuffer = new BufferedWaveProvider(Wire)
@@ -162,5 +179,10 @@ public sealed class AudioRouter : IDisposable
         _capture?.Dispose();
         try { _output?.Stop(); } catch { }
         _output?.Dispose();
+        if (_didMute)
+        {
+            try { _loopbackRender.AudioEndpointVolume.Mute = _prevMute; } catch { }
+            _didMute = false;
+        }
     }
 }

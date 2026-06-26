@@ -22,7 +22,6 @@ final class AudioEngine {
     private let engine = AVAudioEngine()
     private var sourceNode: AVAudioSourceNode?
     private var playing = false             // false until the jitter buffer pre-rolls
-    private var speakerOn = true            // loudspeaker vs earpiece route
     private let playbackBuffer = FloatRingBuffer(capacity: Int(AudioFormatSpec.sampleRate) * 2) // 2 s
     private let wireFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
                                            sampleRate: AudioFormatSpec.sampleRate,
@@ -115,17 +114,6 @@ final class AudioEngine {
         engine.mainMixerNode.outputVolume = max(0, min(1, v))
     }
 
-    /// Live route toggle, exactly like a phone call's speaker button:
-    /// on → loudspeaker, off → earpiece. Safe to call during a session.
-    func setSpeaker(_ on: Bool) {
-        speakerOn = on
-        applyRoute()
-    }
-
-    private func applyRoute() {
-        try? AVAudioSession.sharedInstance().overrideOutputAudioPort(speakerOn ? .speaker : .none)
-    }
-
     /// Audio-thread render: jitter buffer with a live target depth (latency mode).
     /// Pre-rolls until `targetLatencyMs` has buffered, drops the oldest when too
     /// far ahead, and outputs silence on underrun (re-arming the pre-roll).
@@ -155,15 +143,14 @@ final class AudioEngine {
 
     private func configureSession() throws {
         let session = AVAudioSession.sharedInstance()
-        // Always the call profile (.voiceChat): hardware echo cancellation so the
-        // PC never hears its own audio back through the mic. The loudspeaker vs
-        // earpiece route is controlled live via setSpeaker().
+        // The v1.0.9 profile (the one that sounded right): .voiceChat for hardware
+        // echo cancellation, defaulting to and forced onto the loudspeaker.
         try session.setCategory(.playAndRecord, mode: .voiceChat,
-                                options: [.allowBluetoothA2DP, .allowBluetoothHFP])
+                                options: [.defaultToSpeaker, .allowBluetoothA2DP, .allowBluetoothHFP])
         try session.setPreferredSampleRate(AudioFormatSpec.sampleRate)
         try session.setPreferredIOBufferDuration(0.01)
         try session.setActive(true, options: [])
-        applyRoute()
+        try? session.overrideOutputAudioPort(.speaker)
     }
 
     private func handleMic(_ buffer: AVAudioPCMBuffer) {

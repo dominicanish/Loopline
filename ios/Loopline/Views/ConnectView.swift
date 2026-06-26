@@ -50,13 +50,11 @@ struct ConnectView: View {
     private var pairedCard: some View {
         GlassCard {
             HStack(spacing: 13) {
-                IconTile(systemImage: "desktopcomputer", color: connected ? Palette.blue : .gray)
+                IconTile(systemImage: "desktopcomputer",
+                         color: connected ? Palette.blue : Palette.indigo.opacity(0.65))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(connected ? (model.peerName.isEmpty ? "Your PC" : model.peerName) : "Waiting for your PC")
-                        .font(.system(size: 17, weight: .medium))
-                    Text(connected
-                         ? "Connected · \(model.sampleRate / 1000) kHz · \(model.latencyMs) ms"
-                         : "Run Loopline.Server.exe on Windows")
+                    Text(title).font(.system(size: 17, weight: .medium))
+                    Text(subtitle)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(connected ? Palette.green : .secondary)
                 }
@@ -68,12 +66,24 @@ struct ConnectView: View {
                             .font(.system(size: 12, weight: .bold))
                             .foregroundStyle(.white)
                     }
-                } else {
+                } else if model.running {
                     ProgressView()
                 }
             }
             .padding(.horizontal, 16).padding(.vertical, 13)
         }
+    }
+
+    private var title: String {
+        if connected { return model.peerName.isEmpty ? "Your PC" : model.peerName }
+        return model.running ? "Looking for your PC…" : "No computer connected"
+    }
+
+    private var subtitle: String {
+        if connected { return "Connected · \(model.sampleRate / 1000) kHz · \(model.latencyMs) ms" }
+        return model.running
+            ? "Keep your iPhone plugged in with Loopline open on your PC"
+            : "Tap Start Session to begin"
     }
 
     private var startButton: some View {

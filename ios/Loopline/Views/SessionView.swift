@@ -14,9 +14,6 @@ struct SessionView: View {
                     header
                     bridgeCard.padding(.horizontal, 16).padding(.top, 18)
 
-                    SectionHeader(text: "Output")
-                    speakerControl.padding(.horizontal, 16)
-
                     SectionHeader(text: "Incoming · Computer audio")
                     incomingCard.padding(.horizontal, 16)
 
@@ -86,25 +83,6 @@ struct SessionView: View {
         VStack(spacing: 9) {
             IconTile(systemImage: symbol, color: color, size: 50, corner: 14)
             Text(label).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
-        }
-    }
-
-    // MARK: speaker route (live, like a call's speaker button)
-
-    private var speakerControl: some View {
-        GlassCard {
-            HStack(spacing: 12) {
-                IconTile(systemImage: model.speakerOn ? "speaker.wave.3.fill" : "iphone.gen3",
-                         color: model.speakerOn ? Palette.blue : .gray, size: 30, corner: 8)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Speaker").font(.system(size: 17, weight: .medium))
-                    Text(model.speakerOn ? "Loudspeaker" : "Earpiece")
-                        .font(.system(size: 13)).foregroundStyle(.secondary)
-                }
-                Spacer()
-                Toggle("", isOn: $model.speakerOn).labelsHidden().tint(Palette.green)
-            }
-            .padding(.horizontal, 16).padding(.vertical, 12)
         }
     }
 

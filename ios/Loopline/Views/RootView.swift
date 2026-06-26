@@ -11,23 +11,29 @@ struct RootView: View {
             Tab("Connect", systemImage: "personalhotspot", value: Screen.connect) {
                 ConnectView()
             }
-            // Session is only reachable while a session is open.
-            if model.running {
+            // Session and Screen only exist once the server handshake is confirmed.
+            if connected {
                 Tab("Session", systemImage: "waveform", value: Screen.session) {
                     SessionView()
                 }
-            }
-            Tab("Screen", systemImage: "rectangle.on.rectangle", value: Screen.screen) {
-                ScreenView()
+                Tab("Screen", systemImage: "rectangle.on.rectangle", value: Screen.screen) {
+                    ScreenView()
+                }
             }
             Tab("Settings", systemImage: "gearshape", value: Screen.settings) {
                 SettingsView()
             }
         }
-        .onChange(of: model.running) { _, running in
-            selection = running ? .session : .connect
+        .onChange(of: connected) { _, isConnected in
+            if isConnected {
+                selection = .session
+            } else if selection == .session || selection == .screen {
+                selection = .connect
+            }
         }
     }
+
+    private var connected: Bool { model.status == .connected }
 }
 
 #Preview {

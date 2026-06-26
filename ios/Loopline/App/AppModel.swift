@@ -18,14 +18,20 @@ final class AppModel: ObservableObject {
     @Published var latencyMs: Int = 0
     @Published var running: Bool = false
     @Published var speakerVolume: Double = 1.0 { didSet { audio.setOutputVolume(Float(speakerVolume)) } }
-    /// Loudspeaker (true) vs earpiece (false) — live, like a call's speaker button.
-    @Published var speakerOn: Bool = true { didSet { audio.setSpeaker(speakerOn) } }
     /// Playback latency mode: "low" | "balanced" | "stable". Applied live.
     @Published var latencyMode: String = UserDefaults.standard.string(forKey: "latencyMode") ?? "balanced" {
         didSet {
             UserDefaults.standard.set(latencyMode, forKey: "latencyMode")
             audio.targetLatencyMs = Self.latencyMs(for: latencyMode)
         }
+    }
+    /// Keep listening for the PC to come back after a drop (vs ending the session).
+    @Published var autoReconnect: Bool = (UserDefaults.standard.object(forKey: "autoReconnect") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(autoReconnect, forKey: "autoReconnect") }
+    }
+    /// Keep audio running when the app is backgrounded (vs ending the session).
+    @Published var keepAudioBackground: Bool = (UserDefaults.standard.object(forKey: "keepAudioBackground") as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(keepAudioBackground, forKey: "keepAudioBackground") }
     }
 
     @Published var connectedSince: Date?
@@ -56,6 +62,14 @@ final class AppModel: ObservableObject {
         link.onMessage = { [weak self] type, payload in
             self?.handleMessage(type, payload)
         }
+        NotificationCenter.default.addObserver(forName: UIApplication.didEnterBackgroundNotification,
+                                               object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.handleEnterBackground() }
+        }
+    }
+
+    private func handleEnterBackground() {
+        if running && !keepAudioBackground { stop() }
     }
 
     // MARK: - Control
@@ -91,7 +105,6 @@ final class AppModel: ObservableObject {
         do {
             try audio.start(captureEnabled: micGranted)
             audio.setOutputVolume(Float(speakerVolume))
-            audio.setSpeaker(speakerOn)
         } catch {
             NSLog("Loopline: audio start failed \(error)")
         }
@@ -118,16 +131,19 @@ final class AppModel: ObservableObject {
     private func handleLinkState(_ state: USBLink.State) {
         switch state {
         case .connected:
-            status = .connected
-            connectedSince = Date()
+            // TCP is up — send our HELLO and wait for the server's HELLO before we
+            // consider ourselves connected (handshake confirms it's Loopline).
             let name = Hello.phone(name: UIDevice.current.name)
             link.send(.hello, name.data)
             startPing()
         case .listening, .idle:
+            let wasConnected = (status == .connected)
             status = .waiting
             peerName = ""
             connectedSince = nil
             pingTimer?.invalidate(); pingTimer = nil
+            // If the peer dropped and auto-reconnect is off, end the session.
+            if wasConnected && !autoReconnect && running { stop() }
         }
     }
 
@@ -137,7 +153,11 @@ final class AppModel: ObservableObject {
             audio.enqueueSpeaker(payload)
         case .hello:
             if let hello = Hello.decode(payload) {
-                Task { @MainActor in self.peerName = hello.name }
+                Task { @MainActor in
+                    self.peerName = hello.name                 // handshake confirmed
+                    self.status = .connected
+                    if self.connectedSince == nil { self.connectedSince = Date() }
+                }
             }
         case .ping:
             link.send(.pong, payload)

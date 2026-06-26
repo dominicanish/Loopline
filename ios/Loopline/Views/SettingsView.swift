@@ -3,8 +3,6 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @AppStorage("colorSchemePref") private var schemePref = "system"
-    @AppStorage("autoReconnect") private var autoReconnect = true
-    @AppStorage("keepAudioBackground") private var keepAudioBackground = true
 
     var body: some View {
         ZStack {
@@ -40,9 +38,9 @@ struct SettingsView: View {
                     SectionHeader(text: "Connection")
                     GlassCard {
                         VStack(spacing: 0) {
-                            toggleRow("Auto-Reconnect", isOn: $autoReconnect)
+                            toggleRow("Auto-Reconnect", isOn: $model.autoReconnect)
                             RowDivider()
-                            toggleRow("Keep Audio in Background", isOn: $keepAudioBackground)
+                            toggleRow("Keep Audio in Background", isOn: $model.keepAudioBackground)
                         }
                     }
                     .padding(.horizontal, 16)

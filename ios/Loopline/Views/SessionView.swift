@@ -7,25 +7,23 @@ struct SessionView: View {
     private var connected: Bool { model.status == .connected }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AppBackground()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        header
-                        bridgeCard
-                        incomingBlock
-                        outgoingBlock
-                        actionButton
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 24)
+        ZStack {
+            WallBackground()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    bridgeCard.padding(.horizontal, 16).padding(.top, 18)
+
+                    SectionHeader(text: "Incoming · Computer audio")
+                    incomingCard.padding(.horizontal, 16)
+
+                    SectionHeader(text: "Outgoing · Your microphone")
+                    outgoingCard.padding(.horizontal, 16)
+
+                    actionButton.padding(.horizontal, 16).padding(.top, 24)
+                    elapsed
                 }
-            }
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) { EmptyView() }
-                AppearanceToolbarButton(schemePref: $schemePref)
+                .padding(.vertical, 8)
             }
         }
     }
@@ -34,107 +32,122 @@ struct SessionView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 6) {
-                Circle().fill(connected ? Palette.outgoing : .orange).frame(width: 8, height: 8)
-                Text(connected ? (model.peerName.isEmpty ? "PC CONNECTED" : model.peerName.uppercased())
-                               : "WAITING FOR PC")
-                    .font(.caption2.weight(.bold)).tracking(0.5)
-                    .foregroundStyle(.secondary)
+            HStack {
+                HStack(spacing: 7) {
+                    Circle().fill(connected ? Palette.green : .orange).frame(width: 8, height: 8)
+                    Text(connected ? (model.peerName.isEmpty ? "PC CONNECTED" : model.peerName.uppercased())
+                                   : "WAITING FOR PC")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                .padding(.leading, 9).padding(.trailing, 11).padding(.vertical, 6)
+                .glassEffect(.regular, in: .capsule)
+                Spacer()
+                ThemeToggleButton(schemePref: $schemePref)
             }
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(Capsule().fill(Color(.secondarySystemGroupedBackground)))
-            .overlay(Capsule().strokeBorder(Color.primary.opacity(0.06)))
-
-            Text("Loopline")
-                .font(.largeTitle.bold())
+            Text("Loopline").font(.system(size: 34, weight: .bold))
             Text("Two-way audio bridge over USB")
-                .font(.subheadline).foregroundStyle(.secondary)
+                .font(.system(size: 15)).foregroundStyle(.secondary)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.top, 4)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
     }
 
-    // MARK: bridge diagram
+    // MARK: bridge
 
     private var bridgeCard: some View {
-        Card {
-            VStack(spacing: 14) {
+        GlassCard(cornerRadius: 26) {
+            VStack(spacing: 16) {
                 HStack {
-                    endpoint(tile: IconTile(systemImage: "desktopcomputer", color: Palette.computerTile),
-                             label: "Computer")
+                    endpoint("desktopcomputer", Palette.blue, "Computer")
                     Spacer()
                     FlowDots(active: connected)
                     Spacer()
-                    endpoint(tile: IconTile(systemImage: "iphone", color: Palette.phoneTile),
-                             label: "iPhone")
+                    endpoint("iphone", Palette.indigo, "iPhone")
                 }
-                Divider().opacity(0.5)
-                Text("\(model.latencyMs) ms latency  ·  \(model.sampleRate / 1000) kHz  ·  PCM")
-                    .font(.footnote).foregroundStyle(.secondary)
+                RowDivider(inset: 0)
+                HStack(spacing: 8) {
+                    Text("\(model.latencyMs) ms latency")
+                    Text("·").foregroundStyle(.tertiary)
+                    Text("\(model.sampleRate / 1000) kHz")
+                    Text("·").foregroundStyle(.tertiary)
+                    Text("PCM")
+                }
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 18).padding(.vertical, 20)
+        }
+    }
+
+    private func endpoint(_ symbol: String, _ color: Color, _ label: String) -> some View {
+        VStack(spacing: 9) {
+            IconTile(systemImage: symbol, color: color, size: 50, corner: 14)
+            Text(label).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: incoming
+
+    private var incomingCard: some View {
+        GlassCard {
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    IconTile(systemImage: "speaker.wave.2.fill", color: Palette.blue, size: 30, corner: 8)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Computer Audio").font(.system(size: 17, weight: .medium))
+                        Text("System mix · Stereo").font(.system(size: 13)).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Toggle("", isOn: $model.speakerEnabled).labelsHidden().tint(Palette.green)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 12)
+
+                RowDivider()
+                MeterView(level: model.speakerEnabled ? model.speakerLevel : 0, color: Palette.blue)
+                    .opacity(model.speakerEnabled ? 1 : 0.25)
+                    .padding(.horizontal, 16).padding(.vertical, 15)
+
+                RowDivider()
+                HStack(spacing: 11) {
+                    Image(systemName: "speaker.fill").font(.system(size: 13)).foregroundStyle(.secondary)
+                    Slider(value: $model.speakerVolume, in: 0...1).tint(.secondary)
+                    Image(systemName: "speaker.wave.3.fill").font(.system(size: 13)).foregroundStyle(.secondary)
+                }
+                .padding(.horizontal, 16).padding(.vertical, 14)
             }
         }
     }
 
-    private func endpoint<V: View>(tile: V, label: String) -> some View {
-        VStack(spacing: 8) {
-            tile
-            Text(label).font(.caption).foregroundStyle(.secondary)
-        }
-    }
+    // MARK: outgoing
 
-    // MARK: incoming (computer -> iPhone)
-
-    private var incomingBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Overline(text: "Incoming · Computer audio")
-            Card {
-                VStack(spacing: 14) {
-                    HStack(spacing: 12) {
-                        IconTile(systemImage: "speaker.wave.2.fill", color: Palette.incoming, size: 40)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Computer Audio").font(.body.weight(.semibold))
-                            Text("System mix · Stereo").font(.footnote).foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Toggle("", isOn: $model.speakerEnabled).labelsHidden().tint(Palette.outgoing)
+    private var outgoingCard: some View {
+        GlassCard {
+            VStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    IconTile(systemImage: "mic.fill", color: Palette.green, size: 30, corner: 8)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("iPhone Microphone").font(.system(size: 17, weight: .medium))
+                        Text(model.echoCancellation ? "Built-in · Voice isolation" : "Built-in")
+                            .font(.system(size: 13)).foregroundStyle(.secondary)
                     }
-                    MeterView(level: model.speakerEnabled ? model.speakerLevel : 0, color: Palette.incoming)
-                    HStack(spacing: 10) {
-                        Image(systemName: "speaker.fill").foregroundStyle(.secondary).font(.footnote)
-                        Slider(value: $model.speakerVolume, in: 0...1)
-                            .tint(Palette.incoming)
-                        Image(systemName: "speaker.wave.3.fill").foregroundStyle(.secondary).font(.footnote)
-                    }
+                    Spacer()
+                    Toggle("", isOn: $model.micEnabled).labelsHidden().tint(Palette.green)
                 }
-            }
-        }
-    }
+                .padding(.horizontal, 16).padding(.vertical, 12)
 
-    // MARK: outgoing (iPhone mic -> computer)
-
-    private var outgoingBlock: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Overline(text: "Outgoing · Your microphone")
-            Card {
-                VStack(spacing: 14) {
-                    HStack(spacing: 12) {
-                        IconTile(systemImage: "mic.fill", color: Palette.outgoing, size: 40)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("iPhone Microphone").font(.body.weight(.semibold))
-                            Text(model.echoCancellation ? "Built-in · Voice isolation" : "Built-in")
-                                .font(.footnote).foregroundStyle(.secondary)
-                        }
+                RowDivider()
+                VStack(spacing: 9) {
+                    HStack {
+                        Text("Input level").font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
                         Spacer()
-                        Toggle("", isOn: $model.micEnabled).labelsHidden().tint(Palette.outgoing)
+                        Text(model.micEnabled ? "Live" : "Muted")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(model.micEnabled ? Palette.green : Palette.red)
                     }
-                    ZStack(alignment: .topTrailing) {
-                        MeterView(level: model.micEnabled ? model.micLevel : 0, color: Palette.outgoing)
-                        if model.micEnabled && model.running {
-                            Text("LIVE")
-                                .font(.caption2.weight(.bold)).foregroundStyle(Palette.outgoing)
-                        }
-                    }
+                    MeterView(level: model.micEnabled ? model.micLevel : 0, color: Palette.green)
+                        .opacity(model.micEnabled ? 1 : 0.2)
                 }
+                .padding(.horizontal, 16).padding(.top, 13).padding(.bottom, 15)
             }
         }
     }
@@ -146,39 +159,64 @@ struct SessionView: View {
             if model.running { model.stop() } else { model.start() }
         } label: {
             Text(model.running ? "End Session" : "Start Session")
-                .font(.headline)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
+                .padding(.vertical, 15)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(model.running
+                              ? LinearGradient(colors: [Color(hex: 0xFF5A50), Color(hex: 0xFF2D28)],
+                                               startPoint: .top, endPoint: .bottom)
+                              : LinearGradient(colors: [Palette.green, Palette.green],
+                                               startPoint: .top, endPoint: .bottom))
+                )
         }
-        .buttonStyle(.borderedProminent)
-        .tint(model.running ? .red : Palette.outgoing)
-        .controlSize(.large)
-        .padding(.top, 4)
+        .buttonStyle(.plain)
+    }
+
+    private var elapsed: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            Text(elapsedText)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 9)
+        }
+    }
+
+    private var elapsedText: String {
+        guard connected, let since = model.connectedSince else {
+            return model.running ? "Linking…" : "Not connected"
+        }
+        let s = Int(Date().timeIntervalSince(since))
+        let m = s / 60, sec = s % 60
+        return String(format: "Connected · %d:%02d elapsed", m, sec)
     }
 }
 
-/// Animated row of dots flowing between the two endpoints in the bridge card.
+/// Six dots pulsing between the two endpoints (the design's flowPulse).
 struct FlowDots: View {
     var active: Bool
-    var count: Int = 5
+    var count: Int = 6
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 0.1)) { timeline in
+        TimelineView(.animation(minimumInterval: 0.08)) { timeline in
             let t = timeline.date.timeIntervalSinceReferenceDate
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
                 ForEach(0 ..< count, id: \.self) { i in
                     Circle()
-                        .fill(Palette.incoming)
+                        .fill(Palette.blue)
                         .frame(width: 6, height: 6)
-                        .opacity(active ? dotOpacity(i, t: t) : 0.2)
+                        .opacity(active ? pulse(i, t: t) : 0.18)
                 }
             }
         }
     }
 
-    private func dotOpacity(_ i: Int, t: Double) -> Double {
-        let phase = (t * 1.6).truncatingRemainder(dividingBy: Double(count))
-        let d = abs(phase - Double(i))
-        return max(0.25, 1 - d * 0.6)
+    private func pulse(_ i: Int, t: Double) -> Double {
+        let cycle = 1.6
+        let phase = ((t - Double(i) * 0.27) / cycle).truncatingRemainder(dividingBy: 1)
+        return 0.18 + 0.82 * (sin(phase * .pi * 2) * 0.5 + 0.5)
     }
 }

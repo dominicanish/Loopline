@@ -8,102 +8,89 @@ struct ConnectView: View {
     private var connected: Bool { model.status == .connected }
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AppBackground()
-                List {
-                    Section {
-                        Text("Your iPhone, bridged to your PC over a USB cable.")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                            .listRowBackground(Color.clear)
-                            .listRowInsets(EdgeInsets(top: 0, leading: 4, bottom: 8, trailing: 4))
-                    }
+        ZStack {
+            WallBackground()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
 
-                    Section("Computer") {
-                        if connected {
-                            DeviceRow(
-                                tile: IconTile(systemImage: "desktopcomputer", color: Palette.computerTile, size: 44),
-                                title: model.peerName.isEmpty ? "Your PC" : model.peerName,
-                                subtitle: "Connected · \(model.sampleRate / 1000) kHz · \(model.latencyMs) ms",
-                                subtitleColor: Palette.outgoing,
-                                accessory: .check)
-                        } else {
-                            DeviceRow(
-                                tile: IconTile(systemImage: "desktopcomputer", color: .gray, size: 44),
-                                title: "Waiting for your PC",
-                                subtitle: "Run Loopline.Server.exe on Windows",
-                                subtitleColor: .secondary,
-                                accessory: .spinner)
+                    SectionHeader(text: "Paired")
+                    pairedCard.padding(.horizontal, 16)
+
+                    SectionHeader(text: "Session")
+                    GlassCard {
+                        Button(action: goToSession) {
+                            HStack(spacing: 13) {
+                                IconTile(systemImage: "waveform", color: Palette.indigo)
+                                Text(connected ? "Open live session" : "Go to session")
+                                    .font(.system(size: 17, weight: .medium))
+                                    .foregroundStyle(.primary)
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundStyle(.tertiary)
+                            }
+                            .padding(.horizontal, 16).padding(.vertical, 13)
                         }
+                        .buttonStyle(.plain)
                     }
+                    .padding(.horizontal, 16)
 
-                    Section("Session") {
-                        Button {
-                            goToSession()
-                        } label: {
-                            Label(connected ? "Open live session" : "Go to session", systemImage: "waveform")
-                        }
-                        .disabled(false)
-                    }
-
-                    Section {
-                        EmptyView()
-                    } footer: {
-                        Text("Loopline links your iPhone and PC over USB — no Wi-Fi or network needed. Make sure Apple Devices (or iTunes) is installed so Windows can see your iPhone.")
-                    }
+                    Text("Loopline links your iPhone and PC directly over the USB cable — no Wi-Fi or network needed. Make sure Apple Devices (or iTunes) is installed so Windows can see your iPhone.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.horizontal, 32)
+                        .padding(.top, 18)
                 }
-                .scrollContentBackground(.hidden)
+                .padding(.vertical, 8)
             }
-            .navigationTitle("Connect")
-            .toolbar { AppearanceToolbarButton(schemePref: $schemePref) }
         }
     }
-}
 
-/// A grouped-list device row matching the mockup's paired/available cells.
-struct DeviceRow<Tile: View>: View {
-    enum Accessory { case check, chevron, spinner, none }
-    let tile: Tile
-    let title: String
-    let subtitle: String
-    var subtitleColor: Color = .secondary
-    var accessory: Accessory = .none
-
-    var body: some View {
-        HStack(spacing: 12) {
-            tile
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.body.weight(.semibold)).foregroundStyle(.primary)
-                Text(subtitle).font(.footnote).foregroundStyle(subtitleColor)
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Connect")
+                    .font(.system(size: 34, weight: .bold))
+                Text("Your iPhone, bridged to your PC over USB")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
             }
             Spacer()
-            switch accessory {
-            case .check:
-                Image(systemName: "checkmark.circle.fill").foregroundStyle(Palette.outgoing).font(.title3)
-            case .chevron:
-                Image(systemName: "chevron.right").foregroundStyle(.tertiary).font(.footnote.weight(.semibold))
-            case .spinner:
-                ProgressView()
-            case .none:
-                EmptyView()
-            }
+            ThemeToggleButton(schemePref: $schemePref)
         }
-        .padding(.vertical, 4)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
     }
-}
 
-/// The little sun/moon button in the top-right of every screen.
-struct AppearanceToolbarButton: ToolbarContent {
-    @Binding var schemePref: String
-
-    var body: some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Button {
-                schemePref = (schemePref == "dark") ? "light" : "dark"
-            } label: {
-                Image(systemName: schemePref == "dark" ? "moon.stars.fill" : "sun.max.fill")
+    private var pairedCard: some View {
+        GlassCard {
+            HStack(spacing: 13) {
+                IconTile(systemImage: "desktopcomputer", color: connected ? Palette.blue : .gray)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(connected ? (model.peerName.isEmpty ? "Your PC" : model.peerName) : "Waiting for your PC")
+                        .font(.system(size: 17, weight: .medium))
+                    Text(connected
+                         ? "Connected · \(model.sampleRate / 1000) kHz · \(model.latencyMs) ms"
+                         : "Run Loopline.Server.exe on Windows")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(connected ? Palette.green : .secondary)
+                }
+                Spacer()
+                if connected {
+                    ZStack {
+                        Circle().fill(Palette.green).frame(width: 24, height: 24)
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                } else {
+                    ProgressView()
+                }
             }
+            .padding(.horizontal, 16).padding(.vertical, 13)
         }
     }
 }

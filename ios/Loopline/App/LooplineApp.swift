@@ -9,7 +9,7 @@ struct LooplineApp: App {
         WindowGroup {
             RootView()
                 .environmentObject(model)
-                .tint(Palette.outgoing)
+                .tint(Palette.green)
                 .preferredColorScheme(colorScheme)
         }
     }

@@ -10,64 +10,103 @@ struct SettingsView: View {
     @AppStorage("keepAudioBackground") private var keepAudioBackground = true
 
     var body: some View {
-        NavigationStack {
-            ZStack {
-                AppBackground()
-                Form {
-                    Section("Audio") {
-                        LabeledContent("Codec", value: "PCM · lossless")
-                        LabeledContent("Sample Rate", value: "\(model.sampleRate / 1000) kHz")
-                        LabeledContent("Bit Depth", value: "\(model.bitDepth)-bit")
-                    }
+        ZStack {
+            WallBackground()
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
 
-                    Section {
-                        Picker("Latency mode", selection: $latencyMode) {
-                            Text("Low").tag("low")
-                            Text("Balanced").tag("balanced")
-                            Text("Stable").tag("stable")
+                    SectionHeader(text: "Audio")
+                    GlassCard {
+                        VStack(spacing: 0) {
+                            valueRow("Codec", "PCM · lossless")
+                            RowDivider()
+                            valueRow("Sample Rate", "\(model.sampleRate / 1000) kHz")
+                            RowDivider()
+                            valueRow("Bit Depth", "\(model.bitDepth)-bit")
                         }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                    } header: {
-                        Text("Latency mode")
-                    } footer: {
-                        Text("Lower latency feels more responsive; higher settings add a little buffering for smoother audio.")
                     }
+                    .padding(.horizontal, 16)
 
-                    Section("Microphone") {
-                        Toggle("Echo Cancellation", isOn: $model.echoCancellation).tint(Palette.outgoing)
-                        Toggle("Noise Suppression", isOn: $noiseSuppression).tint(Palette.outgoing)
-                        Toggle("Auto Gain", isOn: $autoGain).tint(Palette.outgoing)
-                    } footer: {
-                        Text(model.running ? "Some changes apply the next time you start a session." : " ")
+                    SectionHeader(text: "Latency mode")
+                    Picker("Latency mode", selection: $latencyMode) {
+                        Text("Low").tag("low")
+                        Text("Balanced").tag("balanced")
+                        Text("Stable").tag("stable")
                     }
+                    .pickerStyle(.segmented).labelsHidden()
+                    .padding(.horizontal, 16)
+                    Text("Lower latency feels more responsive; higher settings add a little buffering for smoother audio.")
+                        .font(.system(size: 13)).foregroundStyle(.secondary)
+                        .padding(.horizontal, 16).padding(.top, 8)
 
-                    Section("Connection") {
-                        Toggle("Auto-Reconnect", isOn: $autoReconnect).tint(Palette.outgoing)
-                        Toggle("Keep Audio in Background", isOn: $keepAudioBackground).tint(Palette.outgoing)
-                    }
-
-                    Section("Appearance") {
-                        Picker("Appearance", selection: $schemePref) {
-                            Text("Light").tag("light")
-                            Text("Dark").tag("dark")
-                            Text("System").tag("system")
+                    SectionHeader(text: "Microphone")
+                    GlassCard {
+                        VStack(spacing: 0) {
+                            toggleRow("Echo Cancellation", isOn: $model.echoCancellation)
+                            RowDivider()
+                            toggleRow("Noise Suppression", isOn: $noiseSuppression)
+                            RowDivider()
+                            toggleRow("Auto Gain", isOn: $autoGain)
                         }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
                     }
+                    .padding(.horizontal, 16)
 
-                    Section {
-                        EmptyView()
-                    } footer: {
-                        Text("Loopline \(appVersion) · made for USB audio bridging.")
-                            .frame(maxWidth: .infinity, alignment: .center)
+                    SectionHeader(text: "Connection")
+                    GlassCard {
+                        VStack(spacing: 0) {
+                            toggleRow("Auto-Reconnect", isOn: $autoReconnect)
+                            RowDivider()
+                            toggleRow("Keep Audio in Background", isOn: $keepAudioBackground)
+                        }
                     }
+                    .padding(.horizontal, 16)
+
+                    SectionHeader(text: "Appearance")
+                    Picker("Appearance", selection: $schemePref) {
+                        Text("Light").tag("light")
+                        Text("Dark").tag("dark")
+                        Text("System").tag("system")
+                    }
+                    .pickerStyle(.segmented).labelsHidden()
+                    .padding(.horizontal, 16)
+
+                    Text("Loopline \(appVersion)")
+                        .font(.system(size: 13)).foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity).padding(.top, 26)
                 }
-                .scrollContentBackground(.hidden)
+                .padding(.vertical, 8)
             }
-            .navigationTitle("Settings")
         }
+    }
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            Text("Settings").font(.system(size: 34, weight: .bold))
+            Spacer()
+            ThemeToggleButton(schemePref: $schemePref)
+        }
+        .padding(.horizontal, 16).padding(.top, 8)
+    }
+
+    private func valueRow(_ title: String, _ value: String) -> some View {
+        HStack(spacing: 12) {
+            Text(title).font(.system(size: 17))
+            Spacer()
+            Text(value).font(.system(size: 17)).foregroundStyle(.secondary)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .semibold)).foregroundStyle(.tertiary)
+        }
+        .padding(.horizontal, 16).frame(minHeight: 48)
+    }
+
+    private func toggleRow(_ title: String, isOn: Binding<Bool>) -> some View {
+        HStack {
+            Text(title).font(.system(size: 17))
+            Spacer()
+            Toggle("", isOn: isOn).labelsHidden().tint(Palette.green)
+        }
+        .padding(.horizontal, 16).frame(minHeight: 48)
     }
 
     private var appVersion: String {

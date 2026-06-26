@@ -20,6 +20,8 @@ final class AppModel: ObservableObject {
     @Published var speakerVolume: Double = 1.0 { didSet { audio.setOutputVolume(Float(speakerVolume)) } }
     @Published var echoCancellation: Bool = true { didSet { audio.echoCancellation = echoCancellation } }
 
+    @Published var connectedSince: Date?
+
     let sampleRate = Int(AudioFormatSpec.sampleRate)
     let bitDepth = 16
 
@@ -100,12 +102,14 @@ final class AppModel: ObservableObject {
         switch state {
         case .connected:
             status = .connected
+            connectedSince = Date()
             let name = Hello.phone(name: UIDevice.current.name)
             link.send(.hello, name.data)
             startPing()
         case .listening, .idle:
             status = .waiting
             peerName = ""
+            connectedSince = nil
             pingTimer?.invalidate(); pingTimer = nil
         }
     }

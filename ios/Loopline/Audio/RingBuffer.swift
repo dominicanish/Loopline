@@ -53,4 +53,12 @@ final class FloatRingBuffer {
         os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
         head = 0; tail = 0; count = 0
     }
+
+    /// Discard the oldest `n` samples (used to bound playback latency).
+    func drop(_ n: Int) {
+        os_unfair_lock_lock(&lock); defer { os_unfair_lock_unlock(&lock) }
+        let d = min(n, count)
+        head = (head + d) % capacity
+        count -= d
+    }
 }

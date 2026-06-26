@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ConnectView: View {
     @EnvironmentObject private var model: AppModel
-    var goToSession: () -> Void
     @AppStorage("colorSchemePref") private var schemePref = "system"
 
     private var connected: Bool { model.status == .connected }
@@ -17,25 +16,7 @@ struct ConnectView: View {
                     SectionHeader(text: "Paired")
                     pairedCard.padding(.horizontal, 16)
 
-                    SectionHeader(text: "Session")
-                    GlassCard {
-                        Button(action: goToSession) {
-                            HStack(spacing: 13) {
-                                IconTile(systemImage: "waveform", color: Palette.indigo)
-                                Text(connected ? "Open live session" : "Go to session")
-                                    .font(.system(size: 17, weight: .medium))
-                                    .foregroundStyle(.primary)
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 13, weight: .semibold))
-                                    .foregroundStyle(.tertiary)
-                            }
-                            .padding(.horizontal, 16).padding(.vertical, 13)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                    }
-                    .padding(.horizontal, 16)
+                    startButton.padding(.horizontal, 16).padding(.top, 18)
 
                     Text("Loopline links your iPhone and PC directly over the USB cable — no Wi-Fi or network needed. Make sure Apple Devices (or iTunes) is installed so Windows can see your iPhone.")
                         .font(.system(size: 13))
@@ -93,5 +74,27 @@ struct ConnectView: View {
             }
             .padding(.horizontal, 16).padding(.vertical, 13)
         }
+    }
+
+    private var startButton: some View {
+        Button {
+            if model.running { model.stop() } else { model.start() }
+        } label: {
+            Text(model.running ? "End Session" : "Start Session")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 15)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(model.running
+                              ? LinearGradient(colors: [Color(hex: 0xFF5A50), Color(hex: 0xFF2D28)],
+                                               startPoint: .top, endPoint: .bottom)
+                              : LinearGradient(colors: [Palette.green, Palette.green],
+                                               startPoint: .top, endPoint: .bottom))
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        }
+        .buttonStyle(.plain)
     }
 }

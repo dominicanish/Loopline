@@ -9,14 +9,6 @@ import AVFAudio
 final class AppModel: ObservableObject {
     enum Status: Equatable { case waiting, connected }
 
-    /// How the iOS audio session is configured.
-    enum AudioMode: String, CaseIterable {
-        case speaker   // `.default` — loud, full-range; mic may pick up the speaker
-        case calls     // `.voiceChat` — echo cancellation for two-way calls (quieter)
-
-        var title: String { self == .speaker ? "Speaker" : "Calls" }
-    }
-
     @Published var status: Status = .waiting
     @Published var peerName: String = ""
     @Published var micEnabled: Bool = false { didSet { audio.micEnabled = micEnabled } }
@@ -26,14 +18,25 @@ final class AppModel: ObservableObject {
     @Published var latencyMs: Int = 0
     @Published var running: Bool = false
     @Published var speakerVolume: Double = 1.0 { didSet { audio.setOutputVolume(Float(speakerVolume)) } }
-    /// Speaker = loud full-range (`.default`); Calls = echo cancellation
-    /// (`.voiceChat`). Applies on the next Start Session.
-    @Published var audioMode: AudioMode = AudioMode(rawValue:
-        UserDefaults.standard.string(forKey: "audioMode") ?? "speaker") ?? .speaker {
-        didSet { UserDefaults.standard.set(audioMode.rawValue, forKey: "audioMode") }
+    /// Loudspeaker (true) vs earpiece (false) — live, like a call's speaker button.
+    @Published var speakerOn: Bool = true { didSet { audio.setSpeaker(speakerOn) } }
+    /// Playback latency mode: "low" | "balanced" | "stable". Applied live.
+    @Published var latencyMode: String = UserDefaults.standard.string(forKey: "latencyMode") ?? "balanced" {
+        didSet {
+            UserDefaults.standard.set(latencyMode, forKey: "latencyMode")
+            audio.targetLatencyMs = Self.latencyMs(for: latencyMode)
+        }
     }
 
     @Published var connectedSince: Date?
+
+    static func latencyMs(for mode: String) -> Double {
+        switch mode {
+        case "low": return 35
+        case "stable": return 160
+        default: return 80   // balanced
+        }
+    }
 
     let sampleRate = Int(AudioFormatSpec.sampleRate)
     let bitDepth = 16
@@ -84,10 +87,11 @@ final class AppModel: ObservableObject {
         if !micGranted { micEnabled = false }
         audio.micEnabled = micEnabled && micGranted
         audio.speakerEnabled = speakerEnabled
-        audio.echoCancellation = (audioMode == .calls)
+        audio.targetLatencyMs = Self.latencyMs(for: latencyMode)
         do {
             try audio.start(captureEnabled: micGranted)
             audio.setOutputVolume(Float(speakerVolume))
+            audio.setSpeaker(speakerOn)
         } catch {
             NSLog("Loopline: audio start failed \(error)")
         }

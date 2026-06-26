@@ -3,7 +3,6 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
     @AppStorage("colorSchemePref") private var schemePref = "system"
-    @AppStorage("latencyMode") private var latencyMode = "balanced"
     @AppStorage("autoReconnect") private var autoReconnect = true
     @AppStorage("keepAudioBackground") private var keepAudioBackground = true
 
@@ -27,27 +26,14 @@ struct SettingsView: View {
                     .padding(.horizontal, 16)
 
                     SectionHeader(text: "Latency mode")
-                    Picker("Latency mode", selection: $latencyMode) {
+                    Picker("Latency mode", selection: $model.latencyMode) {
                         Text("Low").tag("low")
                         Text("Balanced").tag("balanced")
                         Text("Stable").tag("stable")
                     }
                     .pickerStyle(.segmented).labelsHidden()
                     .padding(.horizontal, 16)
-                    Text("Lower latency feels more responsive; higher settings add a little buffering for smoother audio.")
-                        .font(.system(size: 13)).foregroundStyle(.secondary)
-                        .padding(.horizontal, 16).padding(.top, 8)
-
-                    SectionHeader(text: "Audio mode")
-                    Picker("Audio mode", selection: $model.audioMode) {
-                        Text("Speaker").tag(AppModel.AudioMode.speaker)
-                        Text("Calls").tag(AppModel.AudioMode.calls)
-                    }
-                    .pickerStyle(.segmented).labelsHidden()
-                    .padding(.horizontal, 16)
-                    Text(model.audioMode == .calls
-                         ? "Calls: echo cancellation on, so the PC won't hear itself through the mic — best for two-way calls. Plays a bit quieter."
-                         : "Speaker: loud, full-range playback for music and media. The mic may pick up the speaker, so switch to Calls for two-way calls.")
+                    Text("Lower = more responsive but more prone to dropouts; higher buffers more for smoother audio. Applies instantly, even mid-session.")
                         .font(.system(size: 13)).foregroundStyle(.secondary)
                         .padding(.horizontal, 16).padding(.top, 8)
 

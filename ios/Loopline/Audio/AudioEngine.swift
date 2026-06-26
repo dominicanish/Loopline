@@ -16,11 +16,13 @@ final class AudioEngine {
     /// Gates: only send mic / only render speaker when enabled.
     var micEnabled = false
     var speakerEnabled = true
-    /// When true use `.voiceChat` (hardware echo cancellation); otherwise `.default`.
-    var echoCancellation = true
+    /// Playback jitter-buffer depth in ms (latency mode). Settable live.
+    var targetLatencyMs: Double = 80
 
     private let engine = AVAudioEngine()
     private var sourceNode: AVAudioSourceNode?
+    private var playing = false             // false until the jitter buffer pre-rolls
+    private var speakerOn = true            // loudspeaker vs earpiece route
     private let playbackBuffer = FloatRingBuffer(capacity: Int(AudioFormatSpec.sampleRate) * 2) // 2 s
     private let wireFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
                                            sampleRate: AudioFormatSpec.sampleRate,
@@ -49,16 +51,11 @@ final class AudioEngine {
             let n = Int(frameCount)
             let ptr = abl[0].mData!.assumingMemoryBound(to: Float.self)
             let dst = UnsafeMutableBufferPointer(start: ptr, count: n)
-            if self.speakerEnabled {
-                self.playbackBuffer.read(into: dst)
-            } else {
-                for i in 0 ..< n { dst[i] = 0 }
-            }
+            self.renderPlayback(into: dst)
             // Duplicate to any extra channels.
             for ch in 1 ..< abl.count {
                 if let m = abl[ch].mData { memcpy(m, ptr, n * MemoryLayout<Float>.size) }
             }
-            self.spkLevel = AudioEngine.rms(dst)
             return noErr
         }
         self.sourceNode = source
@@ -80,6 +77,7 @@ final class AudioEngine {
             NSLog("Loopline: mic input unavailable (format \(inFormat)); running playback-only")
         }
 
+        playing = false           // arm the jitter buffer pre-roll
         engine.prepare()
         try engine.start()
         running = true
@@ -92,6 +90,7 @@ final class AudioEngine {
         if let s = sourceNode { engine.detach(s) }
         sourceNode = nil
         playbackBuffer.clear()
+        playing = false
         running = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
     }
@@ -116,15 +115,55 @@ final class AudioEngine {
         engine.mainMixerNode.outputVolume = max(0, min(1, v))
     }
 
+    /// Live route toggle, exactly like a phone call's speaker button:
+    /// on → loudspeaker, off → earpiece. Safe to call during a session.
+    func setSpeaker(_ on: Bool) {
+        speakerOn = on
+        applyRoute()
+    }
+
+    private func applyRoute() {
+        try? AVAudioSession.sharedInstance().overrideOutputAudioPort(speakerOn ? .speaker : .none)
+    }
+
+    /// Audio-thread render: jitter buffer with a live target depth (latency mode).
+    /// Pre-rolls until `targetLatencyMs` has buffered, drops the oldest when too
+    /// far ahead, and outputs silence on underrun (re-arming the pre-roll).
+    private func renderPlayback(into dst: UnsafeMutableBufferPointer<Float>) {
+        let n = dst.count
+        guard speakerEnabled else {
+            for i in 0 ..< n { dst[i] = 0 }
+            spkLevel = 0
+            return
+        }
+        let target = max(1, Int(targetLatencyMs / 1000 * AudioFormatSpec.sampleRate))
+        let available = playbackBuffer.available
+        if !playing {
+            if available >= target {
+                playing = true
+            } else {
+                for i in 0 ..< n { dst[i] = 0 }
+                return
+            }
+        }
+        let maxBuf = target * 2 + Int(AudioFormatSpec.sampleRate * 0.1)
+        if available > maxBuf { playbackBuffer.drop(available - target) }
+        let read = playbackBuffer.read(into: dst)   // zero-fills any underrun
+        if read < n { playing = false }             // underrun → re-arm pre-roll
+        spkLevel = AudioEngine.rms(dst)
+    }
+
     private func configureSession() throws {
         let session = AVAudioSession.sharedInstance()
-        let mode: AVAudioSession.Mode = echoCancellation ? .voiceChat : .default
-        try session.setCategory(.playAndRecord, mode: mode,
-                                options: [.defaultToSpeaker, .allowBluetoothA2DP, .allowBluetoothHFP])
+        // Always the call profile (.voiceChat): hardware echo cancellation so the
+        // PC never hears its own audio back through the mic. The loudspeaker vs
+        // earpiece route is controlled live via setSpeaker().
+        try session.setCategory(.playAndRecord, mode: .voiceChat,
+                                options: [.allowBluetoothA2DP, .allowBluetoothHFP])
         try session.setPreferredSampleRate(AudioFormatSpec.sampleRate)
         try session.setPreferredIOBufferDuration(0.01)
         try session.setActive(true, options: [])
-        try? session.overrideOutputAudioPort(.speaker)
+        applyRoute()
     }
 
     private func handleMic(_ buffer: AVAudioPCMBuffer) {

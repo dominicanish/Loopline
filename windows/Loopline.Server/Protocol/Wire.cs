@@ -12,6 +12,12 @@ public enum WireType : byte
     Ping   = 0x20,
     Pong   = 0x21,
     Bye    = 0x30,
+    // Remote-control input (phone -> PC), used by the Screen trackpad.
+    MouseMove   = 0x40,   // [int16 dx LE][int16 dy LE] (relative)
+    MouseButton = 0x41,   // [u8 button (0=L,1=R,2=M)][u8 down]
+    MouseScroll = 0x42,   // [int16 delta LE]
+    KeyText     = 0x43,   // UTF-8 text to type
+    KeyCode     = 0x44,   // [u8 special code]
 }
 
 /// <summary>Fixed audio format shared with the iPhone app (see docs/protocol.md).</summary>

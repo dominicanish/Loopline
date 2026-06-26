@@ -17,7 +17,7 @@ struct RootView: View {
                     SessionView()
                 }
                 Tab("Screen", systemImage: "rectangle.on.rectangle", value: Screen.screen) {
-                    ScreenView()
+                    ScreenView(exit: { selection = .session })
                 }
             }
             Tab("Settings", systemImage: "gearshape", value: Screen.settings) {

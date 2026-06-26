@@ -1,4 +1,5 @@
 using Loopline.Server.Audio;
+using Loopline.Server.Input;
 using Loopline.Server.Usbmux;
 using NAudio.CoreAudioApi;
 
@@ -13,6 +14,7 @@ public sealed class Bridge : IDisposable
     private readonly DevicePicker _picker = new();
     private readonly DefaultDeviceSwitcher _switcher = new();
     private readonly UsbmuxClient _usb = new();
+    private readonly InputInjector _injector = new();
 
     private Thread _thread;
     private CancellationTokenSource _cts;
@@ -33,7 +35,7 @@ public sealed class Bridge : IDisposable
     public volatile int LatencyMs;
     public volatile float MicLevel;
     public volatile float SpeakerLevel;
-    public string StatusText = "Iniciando…";
+    public string StatusText = "Starting…";
     public RoutedDevices Devices { get; private set; } = new();
 
     public DevicePicker Picker => _picker;
@@ -80,10 +82,10 @@ public sealed class Bridge : IDisposable
             {
                 var list = SafeList();
                 var dev = list.FirstOrDefault(d => d.ConnectionType == "USB") ?? list.FirstOrDefault();
-                if (dev == null) { StatusText = "Esperando iPhone por USB…"; Wait(ct, 800); continue; }
+                if (dev == null) { StatusText = "Waiting for iPhone over USB…"; Wait(ct, 800); continue; }
 
                 var stream = _usb.Connect(dev.DeviceId, Port, out var owned);
-                if (stream == null) { StatusText = "iPhone detectado — abre la app Loopline en el teléfono…"; Wait(ct, 800); continue; }
+                if (stream == null) { StatusText = "iPhone detected — open the Loopline app on your phone…"; Wait(ct, 800); continue; }
 
                 using (owned)
                 using (var session = new PhoneSession(stream))
@@ -93,10 +95,11 @@ public sealed class Bridge : IDisposable
                     session.OnMic = router.EnqueueMic;
                     router.OnSpeakerPacket = session.SendSpeaker;
                     session.OnPeerName = name => { PeerName = name; Connected = true; };
+                    session.OnInput = (t, p) => _injector.Handle(t, p);
 
                     router.Start();
                     session.SendHello(Environment.MachineName);
-                    StatusText = "Enlazado — confirmando handshake…";
+                    StatusText = "Linked — confirming handshake…";
 
                     using var ping = new Timer(_ => session.SendPing(), null, 1000, 1000);
                     using var meter = new Timer(_ =>
@@ -111,13 +114,13 @@ public sealed class Bridge : IDisposable
 
                 _router = null;
                 Connected = false; PeerName = ""; MicLevel = 0; SpeakerLevel = 0;
-                StatusText = "iPhone desconectado. Reintentando…";
+                StatusText = "iPhone disconnected. Reconnecting…";
             }
             catch (Exception ex)
             {
                 _router = null;
                 Connected = false;
-                StatusText = "Reintentando… (" + ex.Message + ")";
+                StatusText = "Retrying… (" + ex.Message + ")";
                 Wait(ct, 800);
             }
         }

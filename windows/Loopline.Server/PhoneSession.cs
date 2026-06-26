@@ -14,6 +14,8 @@ public sealed class PhoneSession : IDisposable
     public Action<byte[]> OnMic;
     public Action<string> OnPeerName;
     public Action OnBye;
+    /// <summary>Remote-control input from the phone's Screen trackpad.</summary>
+    public Action<WireType, byte[]> OnInput;
     public string PeerName { get; private set; } = "";
     public volatile int LatencyMs;
 
@@ -76,6 +78,13 @@ public sealed class PhoneSession : IDisposable
                 break;
             case WireType.Bye:
                 OnBye?.Invoke();
+                break;
+            case WireType.MouseMove:
+            case WireType.MouseButton:
+            case WireType.MouseScroll:
+            case WireType.KeyText:
+            case WireType.KeyCode:
+                OnInput?.Invoke(type, payload);
                 break;
         }
     }

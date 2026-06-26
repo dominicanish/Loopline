@@ -126,6 +126,38 @@ final class AppModel: ObservableObject {
         micLevel = 0; speakerLevel = 0
     }
 
+    // MARK: - Remote input (Screen trackpad → PC)
+
+    func sendMouseMove(dx: Int, dy: Int) {
+        guard dx != 0 || dy != 0 else { return }
+        var bytes = [UInt8]()
+        var x = Int16(clamping: dx).littleEndian
+        var y = Int16(clamping: dy).littleEndian
+        withUnsafeBytes(of: &x) { bytes.append(contentsOf: $0) }
+        withUnsafeBytes(of: &y) { bytes.append(contentsOf: $0) }
+        link.send(.mouseMove, Data(bytes))
+    }
+
+    func sendMouseButton(_ button: Int, down: Bool) {
+        link.send(.mouseButton, Data([UInt8(button), down ? 1 : 0]))
+    }
+
+    func sendClick(_ button: Int = 0) {
+        sendMouseButton(button, down: true)
+        sendMouseButton(button, down: false)
+    }
+
+    func sendScroll(_ delta: Int) {
+        guard delta != 0 else { return }
+        var d = Int16(clamping: delta).littleEndian
+        var bytes = [UInt8]()
+        withUnsafeBytes(of: &d) { bytes.append(contentsOf: $0) }
+        link.send(.mouseScroll, Data(bytes))
+    }
+
+    func sendKeyText(_ s: String) { link.send(.keyText, Data(s.utf8)) }
+    func sendKeyCode(_ code: UInt8) { link.send(.keyCode, Data([code])) }
+
     // MARK: - Link
 
     private func handleLinkState(_ state: USBLink.State) {

@@ -8,6 +8,12 @@ enum WireType: UInt8 {
     case ping    = 0x20
     case pong    = 0x21
     case bye     = 0x30
+    // Remote-control input (phone → PC), used by the Screen trackpad.
+    case mouseMove   = 0x40   // [int16 dx LE][int16 dy LE]   (relative)
+    case mouseButton = 0x41   // [u8 button (0=L,1=R,2=M)][u8 down]
+    case mouseScroll = 0x42   // [int16 delta LE]
+    case keyText     = 0x43   // UTF-8 text to type
+    case keyCode     = 0x44   // [u8 special code] (1=back,2=enter,3=tab,4=esc,5=L,6=R,7=U,8=D)
 }
 
 /// Fixed audio format shared by both ends. No negotiation.

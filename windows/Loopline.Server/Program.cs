@@ -40,7 +40,7 @@ while (running)
 try { Console.CursorVisible = true; } catch { }
 Console.Clear();
 bridge.Stop();
-Console.WriteLine("Loopline detenido. ¡Hasta luego!");
+Console.WriteLine("Loopline stopped. See you!");
 return;
 
 // ---------------- UI ----------------
@@ -51,7 +51,7 @@ static void Draw(Bridge b)
     int w = Width();
     void L(string s = "") => sb.Append(s.Length >= w ? s[..(w - 1)] : s.PadRight(w - 1)).Append('\n');
 
-    string title = "  Loopline · iPhone como mic y altavoz (USB)  ";
+    string title = "  Loopline · iPhone as PC mic & speaker (USB)  ";
     string bar = new string('─', title.Length);
     L("┌" + bar + "┐");
     L("│" + title + "│");
@@ -60,22 +60,22 @@ static void Draw(Bridge b)
 
     string dot = b.Connected ? "●" : "○";
     string status = b.Connected
-        ? $"Conectado a {b.PeerName}   ({AudioSpec.SampleRate / 1000} kHz · {b.LatencyMs} ms)"
+        ? $"Connected to {b.PeerName}   ({AudioSpec.SampleRate / 1000} kHz · {b.LatencyMs} ms)"
         : b.StatusText;
-    L($"  Estado:   {dot} {status}");
+    L($"  Status:   {dot} {status}");
     L($"            mic {Bar(b.MicLevel)}   spk {Bar(b.SpeakerLevel)}");
     L();
-    L($"  Ruteo:    mic   → {Name(b.Devices.MicRender)}");
-    L($"            audio ← loopback de {Name(b.Devices.LoopbackRender)}");
+    L($"  Routing:  mic   → {Name(b.Devices.MicRender)}");
+    L($"            audio ← loopback of {Name(b.Devices.LoopbackRender)}");
     L();
-    L("  Opciones (pulsa una tecla):");
-    L($"    [M]  Mute de la PC ............ {(b.MutePc ? "ON" : "OFF")}");
-    L($"    [+/-] Ganancia del audio ...... x{b.Gain:0.0#}");
-    L( "    [D]  Dispositivo de salida (loopback)");
-    L($"    [S]  iPhone como mic por defecto  {(b.SwitchDefaults ? "ON" : "OFF")}");
-    L( "    [L]  Listar todos los dispositivos");
-    L( "    [R]  Reiniciar enlace");
-    L( "    [Q]  Salir");
+    L("  Options (press a key):");
+    L($"    [M]   Mute PC ................. {(b.MutePc ? "ON" : "OFF")}");
+    L($"    [+/-] Audio gain ............. x{b.Gain:0.0#}");
+    L( "    [D]   Output device (loopback)");
+    L($"    [S]   iPhone as default mic ... {(b.SwitchDefaults ? "ON" : "OFF")}");
+    L( "    [L]   List all devices");
+    L( "    [R]   Restart link");
+    L( "    [Q]   Quit");
 
     try { Console.SetCursorPosition(0, 0); } catch { }
     Console.Write(sb.ToString());
@@ -101,13 +101,13 @@ static void DeviceMenu(Bridge b)
     Console.Clear();
     var devs = b.Picker.RenderDevices();
     Console.WriteLine();
-    Console.WriteLine("  Dispositivo de salida a capturar (loopback):");
+    Console.WriteLine("  Output device to capture (loopback):");
     Console.WriteLine();
-    Console.WriteLine("    [0]  Predeterminado del sistema");
+    Console.WriteLine("    [0]  System default");
     for (int i = 0; i < devs.Count && i < 9; i++)
         Console.WriteLine($"    [{i + 1}]  {Short(devs[i].FriendlyName)}");
     Console.WriteLine();
-    Console.WriteLine("    Pulsa un número (Esc para cancelar)…");
+    Console.WriteLine("    Press a number (Esc to cancel)…");
 
     var k = Console.ReadKey(true);
     if (k.Key == ConsoleKey.D0) { b.LoopbackOverrideId = null; b.Restart(); }
@@ -124,13 +124,13 @@ static void ListMenu(Bridge b)
     Console.Clear();
     var (renders, captures) = b.Picker.ListNames();
     Console.WriteLine();
-    Console.WriteLine("  Reproducción (render):");
+    Console.WriteLine("  Playback (render):");
     foreach (var r in renders) Console.WriteLine("    • " + Short(r));
     Console.WriteLine();
-    Console.WriteLine("  Grabación (capture):");
+    Console.WriteLine("  Recording (capture):");
     foreach (var c in captures) Console.WriteLine("    • " + Short(c));
     Console.WriteLine();
-    Console.WriteLine("  Pulsa una tecla para volver…");
+    Console.WriteLine("  Press any key to go back…");
     Console.ReadKey(true);
     Console.Clear();
 }

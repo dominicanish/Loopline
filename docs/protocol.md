@@ -27,6 +27,14 @@ Every message is:
 | 0x20 | PING     | both           | 8-byte LE timestamp (ms)                  |
 | 0x21 | PONG     | both           | echo of the PING payload                  |
 | 0x30 | BYE      | both           | empty                                     |
+| 0x40 | MOUSE_MOVE   | iPhone → PC | `[int16 dx LE][int16 dy LE]` (relative)   |
+| 0x41 | MOUSE_BUTTON | iPhone → PC | `[u8 button (0=L,1=R,2=M)][u8 down]`       |
+| 0x42 | MOUSE_SCROLL | iPhone → PC | `[int16 delta LE]`                         |
+| 0x43 | KEY_TEXT     | iPhone → PC | UTF-8 text to type                         |
+| 0x44 | KEY_CODE     | iPhone → PC | `[u8 code]` 1=back 2=enter 3=tab 4=esc 5–8=arrows |
+
+The 0x40–0x44 messages power the **Screen** remote-trackpad: the PC injects them
+as real mouse/keyboard input via `SendInput`.
 
 ### Audio format (fixed, no negotiation)
 

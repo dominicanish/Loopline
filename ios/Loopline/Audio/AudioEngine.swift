@@ -106,7 +106,7 @@ final class AudioEngine {
     private func configureSession() throws {
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .voiceChat,
-                                options: [.defaultToSpeaker, .allowBluetoothA2DP, .allowBluetooth])
+                                options: [.defaultToSpeaker, .allowBluetoothA2DP, .allowBluetoothHFP])
         try session.setPreferredSampleRate(AudioFormatSpec.sampleRate)
         try session.setPreferredIOBufferDuration(0.01)
         try session.setActive(true, options: [])

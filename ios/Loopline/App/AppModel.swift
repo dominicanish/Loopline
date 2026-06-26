@@ -115,7 +115,7 @@ final class AppModel: ObservableObject {
             guard let self else { return }
             Task { @MainActor in
                 self.micLevel = self.audio.micLevel
-                self.speakerLevel = self.audio.speakerLevel
+                self.speakerLevel = self.audio.spkLevel
             }
         }
     }

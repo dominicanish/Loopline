@@ -11,7 +11,7 @@ final class AppModel: ObservableObject {
 
     @Published var status: Status = .waiting
     @Published var peerName: String = ""
-    @Published var micEnabled: Bool = false { didSet { applyMic() } }
+    @Published var micEnabled: Bool = false { didSet { audio.micEnabled = micEnabled } }
     @Published var speakerEnabled: Bool = true { didSet { audio.speakerEnabled = speakerEnabled } }
     @Published var micLevel: Float = 0
     @Published var speakerLevel: Float = 0
@@ -68,56 +68,18 @@ final class AppModel: ObservableObject {
 
     private func beginSession(micGranted: Bool) {
         guard running else { return }  // stopped while the prompt was up
+        if !micGranted { micEnabled = false }
+        audio.micEnabled = micEnabled && micGranted
         audio.speakerEnabled = speakerEnabled
         audio.echoCancellation = echoCancellation
         do {
-            try audio.start(micCapable: micGranted)
+            try audio.start(captureEnabled: micGranted)
             audio.setOutputVolume(Float(speakerVolume))
         } catch {
             NSLog("Loopline: audio start failed \(error)")
         }
-        if micGranted {
-            audio.micSendEnabled = micEnabled
-        } else {
-            micEnabled = false
-        }
         link.start()
         startMeters()
-    }
-
-    /// The mic toggle only gates whether captured frames are sent to the PC. The
-    /// mic is captured for the whole session (indicator on). If permission wasn't
-    /// held when the session started, enabling the toggle requests it and
-    /// reconfigures the session once.
-    private func applyMic() {
-        guard running else { return }
-        if micEnabled && !audio.micCapable {
-            switch AVAudioApplication.shared.recordPermission {
-            case .denied:
-                micEnabled = false
-            case .granted:
-                reconfigureForMic()
-            default:
-                AVAudioApplication.requestRecordPermission { [weak self] granted in
-                    Task { @MainActor in
-                        guard let self else { return }
-                        if granted { self.reconfigureForMic() } else { self.micEnabled = false }
-                    }
-                }
-            }
-            return
-        }
-        audio.micSendEnabled = micEnabled
-    }
-
-    private func reconfigureForMic() {
-        do {
-            try audio.start(micCapable: true)
-            audio.setOutputVolume(Float(speakerVolume))
-        } catch {
-            NSLog("Loopline: mic reconfigure failed \(error)")
-        }
-        audio.micSendEnabled = micEnabled
     }
 
     func stop() {

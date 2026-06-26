@@ -18,7 +18,10 @@ final class AppModel: ObservableObject {
     @Published var latencyMs: Int = 0
     @Published var running: Bool = false
     @Published var speakerVolume: Double = 1.0 { didSet { audio.setOutputVolume(Float(speakerVolume)) } }
-    @Published var echoCancellation: Bool = true { didSet { audio.echoCancellation = echoCancellation } }
+    // Off by default → `.default` audio mode = loud, full-range playback. Turning
+    // it on uses `.voiceChat` (hardware echo cancellation) but plays quieter at
+    // the call volume. Applied on the next Start Session.
+    @Published var echoCancellation: Bool = false { didSet { audio.echoCancellation = echoCancellation } }
 
     @Published var connectedSince: Date?
 
